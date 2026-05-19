@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": false,           // <--- ASEGÚRATE DE QUE ESTÉ EN FALSE
+    "incremental": false       // Desactiva esto un momento para limpiar caché
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "prisma.config.ts"]
+}

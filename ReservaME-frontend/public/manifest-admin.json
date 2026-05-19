@@ -1,0 +1,24 @@
+{
+  "name": "Black & White Login",
+  "short_name": "Login B&W",
+  "description": "Panel de Gestión de Barbería.",
+  "start_url": "/portal-baw", 
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/img/icon_x192.png", 
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any" 
+    },
+    {
+      "src": "/img/icon_x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+# ======================
+# Logs
+# ======================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ======================
+# Diagnostic reports
+# ======================
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ======================
+# Runtime data
+# ======================
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ======================
+# Coverage / Testing
+# ======================
+coverage
+*.lcov
+.nyc_output
+
+# ======================
+# Dependencies
+# ======================
+node_modules/
+jspm_packages/
+bower_components
+web_modules/
+
+# ======================
+# Caches
+# ======================
+.cache
+.parcel-cache
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+.yarn-integrity
+.pnp.*
+.yarn/*
+
+# ======================
+# Build outputs
+# ======================
+dist/
+build/Release
+out
+.next
+.nuxt
+.vuepress/dist
+.svelte-kit/
+**/.vitepress/dist
+**/.vitepress/cache
+.docusaurus
+.serverless/
+.fusebox/
+
+# ======================
+# Prisma
+# ======================
+/generated/prisma
+prisma/dev.db
+prisma/dev.db-journal
+prisma/.cache/
+prisma/migrations/**/.env
+
+# ======================
+# Env files
+# ======================
+.env
+.env.*
+!.env.example
+
+# ======================
+# OS / Editor
+# ======================
+.DS_Store
+**/.DS_Store
+Thumbs.db
+.vscode/
+.vscode-test
+.idea/
+
+# ======================
+# TypeScript
+# ======================
+*.tsbuildinfo
+
+# ======================
+# Misc
+# ======================
+*.tgz
+.lock-wscript
+.grunt
+lib-cov
