@@ -1,11 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
+import TarjetaServicio from "@/componentes/publico/TarjetaServicio";
 import {
   obtenerBarberoPublico,
   listarServiciosDeBarberoPublico,
 } from "@/services/barberos.service";
 import PortafolioPublico from "@/componentes/publico/PortafolioPublico";
+import ResenasPublicas from "@/componentes/publico/ResenasPublicas";
 import { listarResenasPorBarberoPublico } from "@/services/resenas-publicas.service";
+import BotonReservarModal from "@/componentes/publico/BotonReservarModal";
 
 /* Helpers */
 function initials(name: string) {
@@ -25,31 +28,33 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
   const { slug } = await params;
 
   const barber = await obtenerBarberoPublico(slug);
-  // Nota: servicios ya no se usan para el modal, pero podrías listarlos como info estática si quisieras
+  const servicios = await listarServiciosDeBarberoPublico(slug);
   const resenas = await listarResenasPorBarberoPublico(slug);
 
   const imgSrc = safeImageSrc(barber.photoUrl);
   const ini = initials(barber.name);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10 pb-24 md:pb-10">
+    <div className="mx-auto w-full max-w-5xl px-4 py-10">
       {/* ===== Header Barbero ===== */}
       <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+        {/* en mobile la foto queda arriba a la derecha */}
         <div className="grid gap-6 md:grid-cols-[1fr_140px] md:items-center">
           {/* INFO IZQUIERDA */}
-          <div className="brand-title min-w-0">
-            {/* Título + Teléfono + Foto (Mobile) */}
+          <div className="min-w-0">
+            {/* título + teléfono + foto arriba derecha */}
             <div className="flex items-start justify-between gap-4 md:hidden">
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-semibold text-black">{barber.name}</h1>
-                {barber.phone && (
+
+                {barber.phone ? (
                   <a
                     href={`tel:${barber.phone}`}
-                    className="mt-1 inline-flex text-sm text-neutral-500 underline underline-offset-4 hover:text-black"
+                    className="mt-2 inline-flex text-sm font-medium text-black underline underline-offset-4 hover:text-neutral-700"
                   >
                     {barber.phone}
                   </a>
-                )}
+                ) : null}
               </div>
 
               <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-50 shadow-sm ring-4 ring-white">
@@ -69,48 +74,40 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
               </div>
             </div>
 
-            {/* Desktop: Título y Teléfono */}
+            {/* Desktop/Tablet: título y teléfono normales (foto va a la derecha) */}
             <div className="hidden md:block">
-              <h1 className="text-3xl font-semibold text-black">{barber.name}</h1>
-              {barber.phone && (
+              <h1 className="text-2xl font-semibold text-black">{barber.name}</h1>
+
+              {barber.phone ? (
                 <a
                   href={`tel:${barber.phone}`}
-                  className="mt-1 inline-flex text-base text-neutral-500 underline underline-offset-4 hover:text-black"
+                  className="mt-2 inline-flex text-sm font-medium text-black underline underline-offset-4 hover:text-neutral-700"
                 >
                   {barber.phone}
                 </a>
-              )}
+              ) : null}
             </div>
 
             {/* Bio */}
             {barber.bio ? (
-              <p className="mt-3 text-lg text-neutral-500">{barber.bio}</p>
+              <p className="mt-4 text-neutral-700">{barber.bio}</p>
             ) : (
-              <p className="mt-3 text-lg text-neutral-400">Barbero profesional</p>
+              <p className="mt-4 text-neutral-500">Barbero profesional</p>
             )}
 
-            {/* BOTÓN RESERVAR (Desktop) */}
-            <div className="mt-6 hidden md:block">
-              <a
-                href={barber.linkSetmore}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="milonga-regular inline-flex items-center justify-center rounded-xl bg-black px-8 py-3 text-sm font-bold text-white shadow-lg shadow-neutral-200 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                RESERVAR AHORA
-              </a>
-            </div>
-
-            {/* Chip informativo */}
+            {/* Chips para que no se vea vacío */}
             <div className="mt-5 flex flex-wrap gap-2">
-              <span className="caprasimo-regular inline-flex rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[10px] font-bold tracking-wider text-neutral-500 uppercase">
-                Reserva externa
+              <span className="inline-flex rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-700">
+                Servicios disponibles: {servicios.length}
+              </span>
+              <span className="inline-flex rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-700">
+                Atención con reserva
               </span>
             </div>
           </div>
 
-          {/* FOTO DERECHA (Desktop) */}
-          <div className="hidden justify-end md:flex">
+          {/* FOTO DERECHA (solo md+) */}
+          <div className="hidden justify-start md:flex md:justify-end">
             <div className="relative h-28 w-28 overflow-hidden rounded-full border border-neutral-200 bg-neutral-50 shadow-sm ring-4 ring-white">
               {imgSrc ? (
                 <Image src={imgSrc} alt={barber.name} fill sizes="112px" className="object-cover" />
@@ -124,28 +121,54 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* ===== BOTÓN RESERVAR (Sticky Mobile) ===== */}
-      {/* Solo se ve en mobile y queda pegado abajo */}
-      <div className="fixed right-0 bottom-0 left-0 z-50 border-t border-neutral-100 bg-white/80 p-4 backdrop-blur-md md:hidden">
-        <a
-          href={barber.linkSetmore}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center justify-center rounded-xl bg-black py-4 text-center text-sm font-bold text-white shadow-xl"
-        >
-          RESERVAR CITA
-        </a>
+      {/* ===== Servicios ===== */}
+      <h2 className="mt-10 text-lg font-semibold text-white">Servicios</h2>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {servicios.length === 0 ? (
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
+            Este barbero aún no tiene servicios disponibles.
+          </div>
+        ) : (
+          servicios.map((x) => {
+            const s = x.service;
+            const precio = Number(x.price);
+
+            return (
+              <TarjetaServicio
+                key={x.id}
+                name={s.name}
+                description={s.description ?? undefined}
+                durationMin={x.durationMin}
+                price={Number.isFinite(precio) ? precio : 0}
+                isActive={x.isActive}
+                footerSlot={
+                  <BotonReservarModal
+                    barberId={barber.id}
+                    barberSlug={barber.slug}
+                    barberName={barber.name}
+                    barberServiceId={x.id}
+                    serviceName={s.name}
+                    durationMin={x.durationMin}
+                    className="inline-flex w-full items-center justify-center rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  />
+                }
+              />
+            );
+          })
+        )}
       </div>
 
       {/* ===== Portafolio ===== */}
-      <div className="caprasimo-regular mt-12">
+      <div className="mt-12">
         <PortafolioPublico
           fotos={barber.portfolioImages.map((x) => ({ id: x.id, imageUrl: x.imageUrl }))}
-          titulo="Portafolio de Trabajos"
+          titulo="Trabajos"
         />
       </div>
 
-      {/* Podrías agregar las reseñas aquí abajo también */}
+      {/* ===== Reseñas ===== */}
+      <ResenasPublicas resenas={resenas} />
     </div>
   );
 }

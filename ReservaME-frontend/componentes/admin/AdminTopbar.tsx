@@ -21,7 +21,7 @@ export default function AdminTopbar({ onOpenMenu }: { onOpenMenu: () => void }) 
       document.cookie = "auth_flag=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
       // Redirección inmediata y limpieza de caché de ruta
-      window.location.href = "/portal-baw";
+      window.location.href = "/login";
     }
   }
 

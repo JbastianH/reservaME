@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 export default function PwaManifest() {
   const pathname = usePathname();
   
-  // Si la ruta es exactamente /portal-baw o empieza con /portal-baw
-  const manifestUrl = pathname?.startsWith("/portal-baw") 
+  const manifestUrl = pathname?.startsWith("/login") 
     ? "/manifest-admin.json" 
     : "/manifest.json";
 

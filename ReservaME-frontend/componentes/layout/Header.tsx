@@ -28,8 +28,8 @@ export default function Header() {
         {/* Renderiza el enlace con el logo de la marca alineado a la izquierda. */}
         <Link href="/" className="flex items-center gap-3">
           <Image
-            src="/img/logoPNG-sinFondo.png"
-            alt="Black & White Studio"
+            src="https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png"
+            alt="ReservaME Logo"
             width={200}
             height={200}
             className="object-contain"

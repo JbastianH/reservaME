@@ -304,7 +304,7 @@ export class AuthService {
     });
 
     const frontendUrl = (this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001').replace(/\/$/, '');
-    const link = `${frontendUrl}/portal-baw/reset-password/${tokenPlano}`;
+    const link = `${frontendUrl}/login/reset-password/${tokenPlano}`;
 
     const nombreParaCorreo = user.barber?.name || 'Administrador';
 

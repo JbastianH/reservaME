@@ -32,7 +32,7 @@ export class MailService {
     const subject = 'Activa tu cuenta - ReservaME';
 
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
     const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">
@@ -117,7 +117,7 @@ export class MailService {
   async enviarResena(params: { to: string; link: string; nombre: string }) {
     const subject = 'Tu opinión nos ayuda - ReservaME';
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
     const NOMBRE_MARCA = 'ReservaME';
 
     const html = `
@@ -213,7 +213,7 @@ export class MailService {
     };
     linkGestion: string;
   }) {
-    const subject = 'Tu reserva está confirmada - Black And White Studio';
+    const subject = 'Tu reserva está confirmada - ReservaME';
 
     const start = this.formatInChile(params.resumen.startAt);
     const end = this.formatInChile(params.resumen.endAt);
@@ -224,8 +224,8 @@ export class MailService {
         : null;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+    const NOMBRE_MARCA = 'ReservaME';
 
     const politicaHtml = `
     <p style="margin: 10px 0 0; font-size: 12px; color:#6b7280;">
@@ -347,7 +347,7 @@ export class MailService {
     };
     linkGestion: string;
   }) {
-    const subject = 'Tu reserva fue reprogramada - Black And White Studio';
+    const subject = 'Tu reserva fue reprogramada - ReservaME';
 
     const start = this.formatInChile(params.resumen.startAt);
     const end = this.formatInChile(params.resumen.endAt);
@@ -358,8 +358,8 @@ export class MailService {
         : null;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+    const NOMBRE_MARCA = 'ReservaME';
 
     const politicaHtml = `
   <p style="margin: 8px 0 16px; font-size: 12px; color:#666;">
@@ -497,7 +497,7 @@ export class MailService {
         : `en aproximadamente ${params.hoursBefore} horas`;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
     const NOMBRE_MARCA = 'ReservaME';
 
     const politicaHtml = `
@@ -614,7 +614,7 @@ export class MailService {
     const subject = 'Restablecer contraseña - ReservaME';
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
     const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">

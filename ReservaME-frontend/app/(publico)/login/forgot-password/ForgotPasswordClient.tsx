@@ -90,7 +90,7 @@ export default function ForgotPasswordClient() {
 
           <button
             type="button"
-            onClick={() => router.push("/portal-baw")}
+            onClick={() => router.push("/login")}
             className="w-full text-sm text-neutral-400 hover:text-white transition"
           >
             Volver al login

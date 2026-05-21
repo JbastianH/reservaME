@@ -18,7 +18,7 @@ export function middleware(req: NextRequest) {
   // Si no tiene la bandera, lo mandamos al login
   if (!authFlag) {
     const url = req.nextUrl.clone();
-    url.pathname = "/portal-baw";
+    url.pathname = "/login";
     url.searchParams.set("redirect", `${pathname}${search}`);
     return NextResponse.redirect(url);
   }

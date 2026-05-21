@@ -18,7 +18,6 @@ export async function crearUserAdmin(dto: {
   role: "ADMIN" | "BARBERO";
   name: string;
   slug: string;
-  linkSetmore: string;
   bio?: string;
   phone?: string;
   photoUrl?: string;
