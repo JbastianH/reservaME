@@ -8,9 +8,9 @@ async function main() {
   // 1. CREACIÓN DEL USUARIO ADMINISTRADOR
   // --------------------------------------------------------
   
-  const adminPasswordRaw = "BlackWhite2026@!"; 
+  const adminPasswordRaw = "Reservame2026@!"; 
   const hashedPassword = await bcrypt.hash(adminPasswordRaw, 10);
-  const adminEmail = "admin@baw.com";
+  const adminEmail = "admin@reservame.com";
 
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },

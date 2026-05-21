@@ -29,12 +29,11 @@ export class MailService {
     link: string;
     nombre: string;
   }) {
-    const subject = 'Activa tu cuenta - Black And White Studio';
+    const subject = 'Activa tu cuenta - ReservaME';
 
     const LOGO_URL =
       'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
-
+    const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px;">
@@ -116,10 +115,10 @@ export class MailService {
   }
 
   async enviarResena(params: { to: string; link: string; nombre: string }) {
-    const subject = 'Tu opinión nos ayuda - Black And White Studio';
+    const subject = 'Tu opinión nos ayuda - ReservaME';
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+    const NOMBRE_MARCA = 'ReservaME';
 
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">
@@ -482,7 +481,7 @@ export class MailService {
     };
     linkGestion: string;
   }) {
-    const subject = `Recordatorio de tu reserva - Black And White Studio`;
+    const subject = `Recordatorio de tu reserva - ReservaME`;
 
     const start = this.formatInChile(params.resumen.startAt);
     const end = this.formatInChile(params.resumen.endAt);
@@ -498,8 +497,8 @@ export class MailService {
         : `en aproximadamente ${params.hoursBefore} horas`;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+    const NOMBRE_MARCA = 'ReservaME';
 
     const politicaHtml = `
   <p style="margin: 8px 0 16px; font-size: 12px; color:#666;">
@@ -612,12 +611,11 @@ export class MailService {
     link: string;
     nombre: string;
   }) {
-    const subject = 'Restablecer contraseña - Black And White Studio';
+    const subject = 'Restablecer contraseña - ReservaME';
 
     const LOGO_URL =
-      'https://res.cloudinary.com/djhlr29xb/image/upload/v1771106629/logoPNG-sinFondo_hj36s5.png';
-    const NOMBRE_MARCA = 'Black And White Studio';
-
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779241601/Logo_ReservaME_nd2nkc.png';
+    const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px;">
