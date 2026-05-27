@@ -14,7 +14,6 @@ type BarberoItem = {
   id: string;
   name: string;
   slug: string;
-  linkSetmore: string; // <-- Agregado
   bio?: string | null;
   phone?: string | null;
   photoUrl?: string | null;
@@ -27,7 +26,6 @@ type BarberoItem = {
 type FormState = {
   name: string;
   slug: string;
-  linkSetmore: string; // <-- Agregado
 
   // SOLO al CREAR (para crear el usuario BARBERO)
   email: string;
@@ -71,7 +69,6 @@ export default function AdminBarberosPage() {
   const [form, setForm] = useState<FormState>({
     name: "",
     slug: "",
-    linkSetmore: "", // <-- Inicializado
     email: "",
     bio: "",
     phone: "",
@@ -81,7 +78,6 @@ export default function AdminBarberosPage() {
   const [touched, setTouched] = useState<{
     name: boolean;
     slug: boolean;
-    linkSetmore: boolean; // <-- Agregado
     email: boolean;
     bio: boolean;
     phone: boolean;
@@ -89,7 +85,6 @@ export default function AdminBarberosPage() {
   }>({
     name: false,
     slug: false,
-    linkSetmore: false, // <-- Inicializado
     email: false,
     bio: false,
     phone: false,
@@ -136,15 +131,6 @@ export default function AdminBarberosPage() {
     return "";
   }, [form.slug, touched.slug]);
 
-  // --- Nueva Validación ---
-  const linkSetmoreError = useMemo(() => {
-    if (!touched.linkSetmore) return "";
-    const v = form.linkSetmore.trim();
-    if (!v) return "El link de reserva es obligatorio.";
-    if (!v.startsWith("http")) return "Debe ser una URL válida (http/https).";
-    return "";
-  }, [form.linkSetmore, touched.linkSetmore]);
-
   const emailError = useMemo(() => {
     // Email solo se exige cuando creas (no al editar)
     if (editId) return "";
@@ -156,7 +142,7 @@ export default function AdminBarberosPage() {
   }, [form.email, touched.email, editId]);
 
   const canSave = useMemo(() => {
-    const commonValid = !nameError && !slugError && !linkSetmoreError && form.name.trim() && form.slug.trim() && form.linkSetmore.trim();
+    const commonValid = !nameError && !slugError && form.name.trim() && form.slug.trim();
     if (editId) {
       return commonValid;
     }
@@ -167,7 +153,7 @@ export default function AdminBarberosPage() {
       form.slug.trim() &&
       form.email.trim()
     );
-  }, [editId, nameError, slugError, linkSetmoreError, emailError, form.name, form.slug, form.email, form.linkSetmore]);
+  }, [editId, nameError, slugError, emailError, form.name, form.slug, form.email]);
 
   const barberosFiltrados = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -194,7 +180,6 @@ export default function AdminBarberosPage() {
     setForm({
       name: "",
       slug: "",
-      linkSetmore: "",
       email: "",
       bio: "",
       phone: "",
@@ -203,7 +188,6 @@ export default function AdminBarberosPage() {
     setTouched({
       name: false,
       slug: false,
-      linkSetmore: false,
       email: false,
       bio: false,
       phone: false,
@@ -219,7 +203,6 @@ export default function AdminBarberosPage() {
     setForm({
       name: item.name ?? "",
       slug: item.slug ?? "",
-      linkSetmore: item.linkSetmore ?? "", // Cargado
       email: item.user?.email ?? "", // solo visual, NO se envía al backend en UPDATE
       bio: item.bio ?? "",
       phone: item.phone ?? "",
@@ -228,7 +211,6 @@ export default function AdminBarberosPage() {
     setTouched({
       name: false,
       slug: false,
-      linkSetmore: false,
       email: false,
       bio: false,
       phone: false,
@@ -245,7 +227,7 @@ export default function AdminBarberosPage() {
 
   async function guardar() {
     resetBanners();
-    setTouched((p) => ({ ...p, name: true, slug: true, email: true, linkSetmore: true }));
+    setTouched((p) => ({ ...p, name: true, slug: true, email: true }));
 
     if (!canSave) {
       setBannerError("Revisa los campos marcados.");
@@ -254,7 +236,6 @@ export default function AdminBarberosPage() {
 
     const payloadName = form.name.trim();
     const payloadSlug = form.slug.trim();
-    const payloadLinkSetmore = form.linkSetmore.trim();
     const payloadEmail = form.email.trim().toLowerCase();
 
     const payloadBio = form.bio.trim() || undefined;
@@ -277,7 +258,6 @@ export default function AdminBarberosPage() {
           role: "BARBERO",
           name: payloadName,
           slug: payloadSlug,
-          linkSetmore: payloadLinkSetmore, // Agregado al payload
           bio: payloadBio,
           phone: payloadPhone,
           photoUrl: payloadPhotoUrl,
@@ -289,11 +269,9 @@ export default function AdminBarberosPage() {
         return;
       }
 
-      // ===== UPDATE (sin email) =====
       await actualizarBarberoAdmin(editId, {
         name: payloadName,
         slug: payloadSlug,
-        linkSetmore: payloadLinkSetmore, // Agregado al payload
         bio: payloadBio,
         phone: payloadPhone,
         photoUrl: payloadPhotoUrl,
@@ -720,22 +698,6 @@ export default function AdminBarberosPage() {
                   {emailError ? <p className="text-xs text-red-600">{emailError}</p> : null}
                 </div>
               ) : null}
-
-              {/* Link de Reserva (Setmore) - NUEVO CAMPO */}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-neutral-600 font-bold">Link para reservas *</label>
-                <input
-                  value={form.linkSetmore}
-                  onChange={(e) => setForm((p) => ({ ...p, linkSetmore: e.target.value }))}
-                  onBlur={() => setTouched((p) => ({ ...p, linkSetmore: true }))}
-                  disabled={Boolean(accionId)}
-                  className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-black outline-none ${
-                    linkSetmoreError ? "border-red-400" : "border-neutral-300 focus:border-black"
-                  }`}
-                  placeholder="https://booking.setmore.com/..."
-                />
-                {linkSetmoreError ? <p className="text-xs text-red-600">{linkSetmoreError}</p> : null}
-              </div>
 
               {/* Bio (opcional) */}
               <div className="space-y-1">

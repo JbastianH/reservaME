@@ -7,13 +7,13 @@ export default function Footer() {
         
         {/* Texto de Copyright */}
         <div className="text-sm text-neutral-500 text-center sm:text-left">
-          © {new Date().getFullYear()} Black & White Studio. Todos los derechos reservados.
+          © {new Date().getFullYear()} ReservaME. Todos los derechos reservados.
         </div>
         
         {/* Contenedor de Redes Sociales */}
         <div className="flex items-center gap-4">
           <Link
-            href="https://instagram.com/studiobarber_bw" // Recuerda cambiar al link real
+            href="https://instagram.com/studiobarber_bw" 
             target="_blank"
             rel="noopener noreferrer"
             /* 

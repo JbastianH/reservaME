@@ -136,7 +136,7 @@ export default function LoginClient() {
               <label className="text-sm font-medium text-neutral-200">Contraseña</label>
               {/* ENLACE A RECUPERACIÓN */}
               <Link 
-                href="/portal-baw/forgot-password" 
+                href="/login/forgot-password" 
                 className="text-xs text-neutral-400 hover:text-white transition-colors"
               >
                 ¿Olvidaste tu contraseña?

@@ -23,15 +23,13 @@ export default function BarberoPerfilPage() {
   const [form, setForm] = useState({
     bio: "",
     phone: "",
-    photoUrl: "",
-    linkSetmore: "",
+    photoUrl: ""
   });
 
   const [touched, setTouched] = useState({
     bio: false,
     phone: false,
     photoUrl: false,
-    linkSetmore: false,
   });
 
   const [busy, setBusy] = useState(false);
@@ -48,9 +46,8 @@ export default function BarberoPerfilPage() {
       bio: data.bio ?? "",
       phone: data.phone ?? "",
       photoUrl: data.photoUrl ?? "",
-      linkSetmore: data.linkSetmore ?? "",
     });
-    setTouched({ bio: false, phone: false, photoUrl: false, linkSetmore: false });
+    setTouched({ bio: false, phone: false, photoUrl: false });
   }, [data]);
 
   const photoUrlError = useMemo(() => {
@@ -59,22 +56,14 @@ export default function BarberoPerfilPage() {
     return "";
   }, [form.photoUrl, touched.photoUrl]);
 
-  const linkSetmoreError = useMemo(() => {
-    if (!touched.linkSetmore) return "";
-    const v = form.linkSetmore.trim();
-    if (!v) return "El link de reserva es obligatorio.";
-    if (!v.startsWith("http")) return "Debe ser una URL válida (http/https).";
-    return "";
-  }, [form.linkSetmore, touched.linkSetmore]);
-
   const canSave = useMemo(() => {
-    return !photoUrlError && !linkSetmoreError && form.linkSetmore.trim();
-  }, [photoUrlError, linkSetmoreError, form.linkSetmore]);
+    return !photoUrlError;
+  }, [photoUrlError]);
 
   async function guardar() {
     setOk("");
     setErr("");
-    setTouched({ bio: true, phone: true, photoUrl: true, linkSetmore: true });
+    setTouched({ bio: true, phone: true, photoUrl: true });
 
     if (!canSave) {
       setErr("Revisa los campos marcados.");
@@ -88,7 +77,6 @@ export default function BarberoPerfilPage() {
         bio: form.bio.trim() || undefined,
         phone: form.phone.trim() || undefined,
         photoUrl: form.photoUrl.trim() || undefined,
-        linkSetmore: form.linkSetmore.trim() || undefined, // 👉 Agregado al DTO
       };
 
       await patchBarberoMe(dto);
@@ -163,7 +151,6 @@ export default function BarberoPerfilPage() {
                 </div>
               </div>
               <div className="mt-4 space-y-1 text-sm">
-                <p className="text-neutral-700 truncate"><span className="font-medium text-blue-600">Reserva:</span> {form.linkSetmore.trim() || "—"}</p>
                 <p className="text-neutral-700"><span className="font-medium">Tel:</span> {form.phone.trim() || "—"}</p>
                 <p className="text-neutral-700"><span className="font-medium">Bio:</span> {form.bio.trim() || "—"}</p>
               </div>
@@ -181,22 +168,6 @@ export default function BarberoPerfilPage() {
                     disabled={busy}
                     className="min-h-[110px] w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-black disabled:opacity-50"
                   />
-                </div>
-
-                {/* NUEVO CAMPO: linkSetmore */}
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-xs font-medium text-neutral-600">Link de Reservas *</label>
-                  <input
-                    value={form.linkSetmore}
-                    onChange={(e) => setForm((p) => ({ ...p, linkSetmore: e.target.value }))}
-                    onBlur={() => setTouched((p) => ({ ...p, linkSetmore: true }))}
-                    disabled={busy}
-                    placeholder="https://booking.setmore.com/..."
-                    className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-black outline-none transition-all ${
-                      linkSetmoreError ? "border-red-400" : "border-neutral-300 focus:border-black"
-                    }`}
-                  />
-                  {linkSetmoreError && <p className="text-xs text-red-600 font-medium">{linkSetmoreError}</p>}
                 </div>
 
                 <div className="space-y-1">

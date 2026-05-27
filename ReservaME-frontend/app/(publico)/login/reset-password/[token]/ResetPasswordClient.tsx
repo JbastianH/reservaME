@@ -101,7 +101,7 @@ export default function ResetPasswordClient() {
           {successMsg && (
             <button
               type="button"
-              onClick={() => router.replace("/portal-baw")}
+              onClick={() => router.replace("/login")}
               className="w-full rounded-lg border border-white/30 bg-black px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
             >
               Ir al Login

@@ -32,7 +32,7 @@ export default function BarberoTopbar({ email: propEmail }: Props) {
     try {
       // 1. Primero redirigimos al usuario fuera de la zona protegida
       // Usamos router.push para que Next.js maneje la transición internamente
-      router.push("/portal-baw");
+      router.push("/login");
       
       // 2. Intentamos el logout en el backend
       await logout(); 
