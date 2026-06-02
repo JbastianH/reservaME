@@ -10,12 +10,6 @@ export class CrearBarberoDto {
   @Length(2, 80)
   name!: string;
 
-  // NUEVO: Campo obligatorio para la redirección a Setmore
-  @IsString()
-  @IsNotEmpty({ message: "El link es obligatorio" })
-  @IsUrl({}, { message: "El link de reserva debe ser una URL válida (ej: https://...)" })
-  linkSetmore!: string;
-
   @IsOptional()
   @IsString()
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)

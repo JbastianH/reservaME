@@ -6,21 +6,22 @@ import { PrismaService } from "../../config/prisma.service";
 export class HorarioBarberoService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async obtenerHorario(userId: string) {
-    const barber = await this.prisma.barber.findUnique({
-      where: { userId },
+  async obtenerHorario(tenantId: string, userId: string) {
+    const barber = await this.prisma.barber.findFirst({
+      where: { userId, tenantId },
       select: { id: true },
     });
 
     if (!barber) throw new NotFoundException("Barbero no encontrado");
 
     return this.prisma.barberWeeklySchedule.findMany({
-      where: { barberId: barber.id },
+      where: { tenantId, barberId: barber.id },
       orderBy: { day: "asc" },
     });
   }
 
   async actualizarHorario(
+    tenantId: string,
     userId: string,
     items: {
       day: DayOfWeek;
@@ -29,8 +30,8 @@ export class HorarioBarberoService {
       endMin?: number;
     }[],
   ) {
-    const barber = await this.prisma.barber.findUnique({
-      where: { userId },
+    const barber = await this.prisma.barber.findFirst({
+      where: { userId, tenantId },
       select: { id: true },
     });
 
@@ -51,6 +52,7 @@ export class HorarioBarberoService {
       this.prisma.barberWeeklySchedule.upsert({
         where: { barberId_day: { barberId: barber.id, day: i.day } },
         create: {
+          tenantId,
           barberId: barber.id,
           day: i.day,
           isClosed: i.isClosed,

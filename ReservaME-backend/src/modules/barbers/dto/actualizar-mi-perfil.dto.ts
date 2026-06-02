@@ -15,9 +15,4 @@ export class ActualizarMiPerfilDto {
   @IsString()
   @MaxLength(400)
   photoUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsUrl({}, { message: "El link de reserva debe ser una URL válida (ej: https://...)" })
-  linkSetmore?: string;
 }

@@ -1,4 +1,5 @@
 import { Controller, Post, Req, UnauthorizedException } from "@nestjs/common";
+import type { Request } from "express";
 import { RemindersService } from "./reminders.service";
 
 @Controller('internal/reminders')

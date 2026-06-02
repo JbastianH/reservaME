@@ -10,6 +10,7 @@ import {
 } from "class-validator";
 
 export enum RolUsuarioDto {
+  SUPER_ADMIN = "SUPER_ADMIN",
   ADMIN = "ADMIN",
   BARBERO = "BARBERO",
 }
@@ -43,7 +44,6 @@ export class CrearUsuarioDto {
   @IsOptional()
   @IsString()
   @IsUrl()
-  linkSetmore?: string;
 
   @IsOptional()
   @IsString()

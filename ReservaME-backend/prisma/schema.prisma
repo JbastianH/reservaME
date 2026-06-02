@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,6 +11,7 @@ datasource db {
 }
 
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   BARBERO
 }
@@ -41,13 +39,65 @@ enum DayOfWeek {
   SUN
 }
 
+model Tenant {
+  id       String  @id @default(uuid())
+  name     String
+  domain   String? @unique
+  email    String?
+  address  String?
+  isActive Boolean @default(true) @map("is_active")
+
+  settings       TenantSettings?
+  appSetting     AppSetting?
+  users          User[]
+  barbers        Barber[]
+  services       Service[]
+  barberServices BarberService[]
+  reservations   Reservation[]
+  portfolioImages PortfolioImage[]
+  reviews        Review[]
+  tokens         Token[]
+  weeklySchedules BarberWeeklySchedule[]
+  productos      Producto[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
+model TenantSettings {
+  id String @id @default(uuid())
+
+  tenantId String @unique @map("tenant_id")
+
+  logoUrl      String? @map("logo_url")
+  heroImageUrl String? @map("hero_image_url")
+
+  primaryColor   String? @map("primary_color")
+  secondaryColor String? @map("secondary_color")
+  headerColor    String? @map("header_color")
+  footerColor    String? @map("footer_color")
+
+  fontFamily String? @map("font_family")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_settings")
+}
+
 model User {
   id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
   email        String   @unique
   passwordHash String?  @map("password_hash")
   role         UserRole
   isActive     Boolean  @default(false) @map("is_active")
 
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   barber Barber?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -55,20 +105,22 @@ model User {
 
   tokens Token[]
 
+  @@index([tenantId])
   @@map("users")
 }
 
 model Barber {
   id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
   userId   String? @unique @map("user_id")
   name     String
-  linkSetmore String
-  slug     String  @unique
+  slug     String
   bio      String?
   phone    String?
   photoUrl String? @map("photo_url")
   isActive Boolean @default(true) @map("is_active")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   services        BarberService[]
@@ -80,17 +132,22 @@ model Barber {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([tenantId, slug])
+  @@index([tenantId])
   @@index([slug])
   @@map("barbers")
 }
 
 model Service {
   id              String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
   name            String
   description     String?
   basePrice       Decimal? @map("base_price")
   baseDurationMin Int?     @map("base_duration_min")
   isActive        Boolean  @default(true) @map("is_active")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   barberServices BarberService[]
   reservations   Reservation[]
@@ -98,17 +155,20 @@ model Service {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@map("services")
 }
 
 model BarberService {
   id          String  @id @default(uuid())
+  tenantId    String  @map("tenant_id")
   barberId    String  @map("barber_id")
   serviceId   String  @map("service_id")
   price       Decimal
   durationMin Int     @map("duration_min")
   isActive    Boolean @default(true) @map("is_active")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   barber  Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
@@ -118,6 +178,7 @@ model BarberService {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([barberId, serviceId])
+  @@index([tenantId])
   @@index([barberId])
   @@index([serviceId])
   @@map("barber_services")
@@ -125,11 +186,11 @@ model BarberService {
 
 model Reservation {
   id              String @id @default(uuid())
+  tenantId        String @map("tenant_id")
   barberId        String @map("barber_id")
   serviceId       String @map("service_id")
   barberServiceId String @map("barber_service_id")
-  comment         String? @db.VarChar(500) @map("comment") 
-
+  comment         String? @db.VarChar(500) @map("comment")
 
   clientName  String @map("client_name")
   clientPhone String @map("client_phone")
@@ -139,14 +200,15 @@ model Reservation {
   endAt   DateTime @map("end_at")
 
   status      ReservationStatus
-  canceledAt  DateTime?         @map("canceled_at")
-  completedAt DateTime?         @map("completed_at")
+  canceledAt  DateTime? @map("canceled_at")
+  completedAt DateTime? @map("completed_at")
 
   reminderSentAt DateTime? @map("reminder_sent_at")
 
   priceFinal       Decimal @map("price_final")
   durationFinalMin Int     @map("duration_final_min")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   barber        Barber        @relation(fields: [barberId], references: [id], onDelete: Restrict)
   service       Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   barberService BarberService @relation(fields: [barberServiceId], references: [id], onDelete: Restrict)
@@ -157,14 +219,18 @@ model Reservation {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@index([barberId, startAt])
   @@index([status])
   @@map("reservations")
 }
 
 model AppSetting {
-  id                  Int      @id @default(1)
+  id                  String   @id @default(uuid())
+  tenantId             String   @unique @map("tenant_id")
   reminderHoursBefore Int      @default(24) @map("reminder_hours_before")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -174,6 +240,7 @@ model AppSetting {
 
 model PortfolioImage {
   id            String  @id @default(uuid())
+  tenantId      String  @map("tenant_id")
   barberId      String  @map("barber_id")
   imageUrl      String  @map("image_url")
   position      Int     @default(0)
@@ -181,35 +248,41 @@ model PortfolioImage {
   hiddenByAdmin Boolean @default(false) @map("hidden_by_admin")
   hiddenReason  String? @map("hidden_reason")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@index([barberId, position])
   @@map("portfolio_images")
 }
 
 model Review {
   id            String  @id @default(uuid())
+  tenantId      String  @map("tenant_id")
   reservationId String  @unique @map("reservation_id")
   barberId      String  @map("barber_id")
   rating        Int
   comment       String?
   visible       Boolean @default(true)
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   barber      Barber      @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([tenantId])
   @@index([barberId])
   @@map("reviews")
 }
 
 model Token {
   id        String    @id @default(uuid())
+  tenantId  String?   @map("tenant_id")
   type      TokenType
   tokenHash String    @unique @map("token_hash")
 
@@ -219,11 +292,13 @@ model Token {
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
 
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   reservation Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([tenantId])
   @@index([type])
   @@index([expiresAt])
   @@map("tokens")
@@ -231,23 +306,25 @@ model Token {
 
 model BarberWeeklySchedule {
   id       String    @id @default(uuid())
+  tenantId String    @map("tenant_id")
   barberId String    @map("barber_id")
   day      DayOfWeek
   isClosed Boolean   @default(false) @map("is_closed")
-  startMin Int       @default(600) @map("start_min") // 10:00
-  endMin   Int       @default(1200) @map("end_min") // 20:00
+  startMin Int       @default(600) @map("start_min")
+  endMin   Int       @default(1200) @map("end_min")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
   @@unique([barberId, day])
+  @@index([tenantId])
   @@index([barberId])
   @@map("barber_weekly_schedule")
 }
 
-
-// Modelo que representa los productos a la venta en la barbería
 model Producto {
   id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
   nombre      String
   descripcion String?
   precio      Int
@@ -256,4 +333,9 @@ model Producto {
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("productos")
 }

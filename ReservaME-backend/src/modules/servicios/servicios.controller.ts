@@ -1,9 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+} from '@nestjs/common';
 
 import { ServiciosService } from './servicios.service';
 import { CreateServicioDto } from './dto/create-servicio.dto';
 import { UpdateServicioDto } from './dto/update-servicio.dto';
 import { Auth } from '../../common/decorators/auth.decorator';
+import type { TenantRequest } from '../../common/tenant/tenant-request.interface';
 
 @Controller()
 export class ServiciosController {
@@ -13,13 +22,13 @@ export class ServiciosController {
   // PUBLICO
   // =========================
   @Get('public/servicios')
-  listarPublico() {
-    return this.serviciosService.listarPublico();
+  listarPublico(@Req() req: TenantRequest) {
+    return this.serviciosService.listarPublico(req.tenant!.id);
   }
 
   @Get('public/servicios/:id')
-  obtenerPublico(@Param('id') id: string) {
-    return this.serviciosService.obtenerPorId(id);
+  obtenerPublico(@Req() req: TenantRequest, @Param('id') id: string) {
+    return this.serviciosService.obtenerPorId(req.tenant!.id, id);
   }
 
   // =========================
@@ -27,38 +36,41 @@ export class ServiciosController {
   // =========================
   @Auth('ADMIN')
   @Post('admin/servicios')
-  crear(@Body() dto: CreateServicioDto) {
-    return this.serviciosService.crear(dto);
+  crear(@Req() req: TenantRequest, @Body() dto: CreateServicioDto) {
+    return this.serviciosService.crear(req.tenant!.id, dto);
   }
 
   @Auth('ADMIN')
   @Get('admin/servicios')
-  listarAdmin() {
-    return this.serviciosService.listar();
+  listarAdmin(@Req() req: TenantRequest) {
+    return this.serviciosService.listar(req.tenant!.id);
   }
 
   @Auth('ADMIN')
   @Get('admin/servicios/:id')
-  obtenerAdmin(@Param('id') id: string) {
-    return this.serviciosService.obtenerPorId(id);
+  obtenerAdmin(@Req() req: TenantRequest, @Param('id') id: string) {
+    return this.serviciosService.obtenerPorId(req.tenant!.id, id);
   }
 
   @Auth('ADMIN')
   @Patch('admin/servicios/:id')
-  actualizar(@Param('id') id: string, @Body() dto: UpdateServicioDto) {
-    return this.serviciosService.actualizar(id, dto);
+  actualizar(
+    @Req() req: TenantRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateServicioDto,
+  ) {
+    return this.serviciosService.actualizar(req.tenant!.id, id, dto);
   }
 
-  // “Eliminar” = desactivar (tu service hace isActive=false)
   @Auth('ADMIN')
   @Patch('admin/servicios/:id/desactivar')
-  eliminar(@Param('id') id: string) {
-    return this.serviciosService.desactivar(id);
+  eliminar(@Req() req: TenantRequest, @Param('id') id: string) {
+    return this.serviciosService.desactivar(req.tenant!.id, id);
   }
 
   @Auth('ADMIN')
   @Patch('admin/servicios/:id/activar')
-  activar(@Param('id') id: string) {
-    return this.serviciosService.activar(id);
+  activar(@Req() req: TenantRequest, @Param('id') id: string) {
+    return this.serviciosService.activar(req.tenant!.id, id);
   }
 }

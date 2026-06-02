@@ -19,7 +19,7 @@ export class ReservasPublicasService {
     private readonly mail: MailService,
   ) {}
 
-  async crear(dto: CrearReservaPublicaDto) {
+  async crear(tenantId: string, dto: CrearReservaPublicaDto) {
     const startAt = this.parseIsoOrThrow(dto.startAt, 'startAt');
 
     const clientName = dto.clientName.trim();
@@ -37,21 +37,26 @@ export class ReservasPublicasService {
     ).replace(/\/$/, '');
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Se valida que el barbero exista y esté activo.
-      const barber = await tx.barber.findUnique({
-        where: { id: dto.barberId },
+      const barber = await tx.barber.findFirst({
+        where: {
+          id: dto.barberId,
+          tenantId,
+        },
         select: { id: true, name: true, isActive: true },
       });
 
       if (!barber) throw new NotFoundException('Barbero no encontrado.');
-      if (!barber.isActive)
+      if (!barber.isActive) {
         throw new BadRequestException(
           'Este barbero no se encuentra disponible.',
         );
+      }
 
-      // Se valida que el BarberService exista y pertenezca al barbero.
-      const barberService = await tx.barberService.findUnique({
-        where: { id: dto.barberServiceId },
+      const barberService = await tx.barberService.findFirst({
+        where: {
+          id: dto.barberServiceId,
+          tenantId,
+        },
         select: {
           id: true,
           barberId: true,
@@ -62,26 +67,28 @@ export class ReservasPublicasService {
         },
       });
 
-      if (!barberService)
+      if (!barberService) {
         throw new NotFoundException('Servicio del barbero no encontrado.');
+      }
+
       if (barberService.barberId !== barber.id) {
         throw new BadRequestException(
           'El servicio seleccionado no pertenece a este barbero.',
         );
       }
+
       if (!barberService.isActive || !barberService.service.isActive) {
         throw new BadRequestException(
           'Este servicio ya no se encuentra disponible. Por favor, elige otro.',
         );
       }
 
-      // Se calcula endAt según duración.
       const durationFinalMin = barberService.durationMin;
       const endAt = new Date(startAt.getTime() + durationFinalMin * 60 * 1000);
 
-      // Se verifica solapamiento en el rango [startAt, endAt).
       const solapada = await tx.reservation.findFirst({
         where: {
+          tenantId,
           barberId: barber.id,
           status: ReservationStatus.CONFIRMADA,
           AND: [{ startAt: { lt: endAt } }, { endAt: { gt: startAt } }],
@@ -95,9 +102,9 @@ export class ReservasPublicasService {
         );
       }
 
-      // Se crea la reserva confirmada.
       const reserva = await tx.reservation.create({
         data: {
+          tenantId,
           barberId: barber.id,
           serviceId: barberService.service.id,
           barberServiceId: barberService.id,
@@ -113,6 +120,7 @@ export class ReservasPublicasService {
         },
         select: {
           id: true,
+          tenantId: true,
           barberId: true,
           serviceId: true,
           barberServiceId: true,
@@ -128,12 +136,12 @@ export class ReservasPublicasService {
         },
       });
 
-      // Se genera token de gestión y se persiste hasheado.
       const tokenPlano = generarTokenSeguro(32);
       const tokenHash = hashToken(tokenPlano);
 
       await tx.token.updateMany({
         where: {
+          tenantId,
           reservationId: reserva.id,
           type: 'GESTION_RESERVA',
           usedAt: null,
@@ -143,6 +151,7 @@ export class ReservasPublicasService {
 
       await tx.token.create({
         data: {
+          tenantId,
           type: 'GESTION_RESERVA',
           tokenHash,
           reservationId: reserva.id,
@@ -150,7 +159,6 @@ export class ReservasPublicasService {
         },
       });
 
-      // Se construye el link de gestión.
       const linkGestion = `${frontendUrl}/reserva/gestionar/${tokenPlano}`;
 
       return {
@@ -161,7 +169,6 @@ export class ReservasPublicasService {
       };
     });
 
-    // Se envía correo fuera de la transacción.
     await this.mail.enviarResumenReservaConGestion({
       to: result.reserva.clientEmail,
       nombre: result.reserva.clientName,
@@ -180,19 +187,12 @@ export class ReservasPublicasService {
     return { ok: true, reserva: result.reserva };
   }
 
-  private parseIsoOrThrow(value: string, campo: string): Date {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) {
-      throw new BadRequestException(
-        `El campo "${campo}" tiene un formato inválido.`,
-      );
-    }
-    return d;
-  }
-
-  async obtenerResumenPublico(id: string) {
-    const r = await this.prisma.reservation.findUnique({
-      where: { id },
+  async obtenerResumenPublico(tenantId: string, id: string) {
+    const r = await this.prisma.reservation.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
       select: {
         id: true,
         status: true,
@@ -231,7 +231,6 @@ export class ReservasPublicasService {
     const tokenHash = hashToken(dto.token);
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Buscar token
       const token = await tx.token.findUnique({
         where: { tokenHash },
         include: {
@@ -239,9 +238,7 @@ export class ReservasPublicasService {
         },
       });
 
-      if (!token) {
-        throw new NotFoundException('Token inválido.');
-      }
+      if (!token) throw new NotFoundException('Token inválido.');
 
       if (token.type !== 'GESTION_RESERVA') {
         throw new BadRequestException(
@@ -261,7 +258,6 @@ export class ReservasPublicasService {
         throw new BadRequestException('Reserva asociada no encontrada.');
       }
 
-      // 2. Validar estado de la reserva
       if (token.reservation.status === 'CANCELADA') {
         throw new BadRequestException('La reserva ya está cancelada.');
       }
@@ -272,7 +268,6 @@ export class ReservasPublicasService {
         );
       }
 
-      // 3. Cancelar reserva
       const reservaCancelada = await tx.reservation.update({
         where: { id: token.reservation.id },
         data: {
@@ -281,7 +276,6 @@ export class ReservasPublicasService {
         },
       });
 
-      // 4. Marcar token como usado
       await tx.token.update({
         where: { id: token.id },
         data: { usedAt: new Date() },
@@ -312,9 +306,7 @@ export class ReservasPublicasService {
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
     ).replace(/\/$/, '');
 
-    // Hacemos DB en transacción y devolvemos datos para enviar correo fuera
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Buscar token
       const token = await tx.token.findUnique({
         where: { tokenHash },
         include: {
@@ -328,16 +320,21 @@ export class ReservasPublicasService {
       });
 
       if (!token) throw new NotFoundException('Token inválido.');
+
       if (token.type !== 'GESTION_RESERVA') {
         throw new BadRequestException(
           'Token no válido para gestión de reserva.',
         );
       }
-      if (token.usedAt)
+
+      if (token.usedAt) {
         throw new BadRequestException('Este enlace ya fue utilizado.');
+      }
+
       if (token.expiresAt.getTime() <= Date.now()) {
         throw new BadRequestException('Este enlace ha expirado.');
       }
+
       if (!token.reservation) {
         throw new BadRequestException('Reserva asociada no encontrada.');
       }
@@ -350,14 +347,13 @@ export class ReservasPublicasService {
         );
       }
 
-      // 2. Recalcular endAt usando duración final
       const nuevaFin = new Date(
         nuevoInicio.getTime() + reserva.durationFinalMin * 60 * 1000,
       );
 
-      // 3. Validar solapamiento
       const conflicto = await tx.reservation.findFirst({
         where: {
+          tenantId: reserva.tenantId,
           barberId: reserva.barberId,
           id: { not: reserva.id },
           status: { in: ['CONFIRMADA'] },
@@ -372,7 +368,6 @@ export class ReservasPublicasService {
         );
       }
 
-      // 4. Actualizar reserva
       const reservaActualizada = await tx.reservation.update({
         where: { id: reserva.id },
         data: {
@@ -381,6 +376,7 @@ export class ReservasPublicasService {
         },
         select: {
           id: true,
+          tenantId: true,
           clientName: true,
           clientEmail: true,
           clientPhone: true,
@@ -395,19 +391,17 @@ export class ReservasPublicasService {
         },
       });
 
-      // 5. Marcar token como usado
       await tx.token.update({
         where: { id: token.id },
         data: { usedAt: new Date() },
       });
 
-      // 6. Crear NUEVO token de gestión (para la nueva hora)
       const tokenPlanoNuevo = generarTokenSeguro(32);
       const tokenHashNuevo = hashToken(tokenPlanoNuevo);
 
-      // Por seguridad: invalidar otros tokens activos de gestión para esta reserva
       await tx.token.updateMany({
         where: {
+          tenantId: reservaActualizada.tenantId,
           reservationId: reservaActualizada.id,
           type: 'GESTION_RESERVA',
           usedAt: null,
@@ -417,6 +411,7 @@ export class ReservasPublicasService {
 
       await tx.token.create({
         data: {
+          tenantId: reservaActualizada.tenantId,
           type: 'GESTION_RESERVA',
           tokenHash: tokenHashNuevo,
           reservationId: reservaActualizada.id,
@@ -432,7 +427,6 @@ export class ReservasPublicasService {
       };
     });
 
-    // Enviar correo fuera de la transacción con NUEVO resumen + NUEVO link
     await this.mail.enviarReservaReprogramadaConGestion({
       to: result.reserva.clientEmail,
       nombre: result.reserva.clientName,
@@ -471,12 +465,15 @@ export class ReservasPublicasService {
     });
 
     if (!token) throw new NotFoundException('Token inválido.');
+
     if (token.type !== 'GESTION_RESERVA') {
       throw new BadRequestException('Token no válido para gestión de reserva.');
     }
+
     if (token.expiresAt.getTime() <= Date.now()) {
       throw new BadRequestException('Este enlace ha expirado.');
     }
+
     if (!token.reservation) {
       throw new BadRequestException('Reserva asociada no encontrada.');
     }
@@ -504,5 +501,15 @@ export class ReservasPublicasService {
         service: r.service,
       },
     };
+  }
+
+  private parseIsoOrThrow(value: string, campo: string): Date {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException(
+        `El campo "${campo}" tiene un formato inválido.`,
+      );
+    }
+    return d;
   }
 }

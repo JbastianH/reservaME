@@ -32,11 +32,6 @@ export class ActualizarBarberoDto {
   photoUrl?: string;
 
   @IsOptional()
-  @IsString()
-  @IsUrl({}, { message: "El link de reserva debe ser una URL válida (ej: https://...)" })
-  linkSetmore?: string;
-
-  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }

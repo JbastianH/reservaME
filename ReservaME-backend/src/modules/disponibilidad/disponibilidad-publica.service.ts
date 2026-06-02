@@ -79,7 +79,7 @@ function hhmmFromDateInTZ(d: Date) {
 export class DisponibilidadPublicaService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async obtenerDisponibilidad(slug: string, dateStr: string) {
+  async obtenerDisponibilidad(tenantId: string, slug: string, dateStr: string) {
     // 1) Validación y control de fechas pasadas (en TZ Chile)
     parseDateOnlyOrThrow(dateStr);
 
@@ -93,7 +93,12 @@ export class DisponibilidadPublicaService {
 
     // 2) Buscar barbero
     const barber = await this.prisma.barber.findUnique({
-      where: { slug },
+      where: {
+        tenantId_slug: {
+          tenantId,
+          slug,
+        },
+      },
       select: { id: true },
     });
     if (!barber) throw new NotFoundException("Barbero no encontrado");
@@ -116,6 +121,7 @@ export class DisponibilidadPublicaService {
 
     const reservas = await this.prisma.reservation.findMany({
       where: {
+        tenantId,
         barberId: barber.id,
         startAt: { gte: dayStart, lt: dayEnd },
         status: "CONFIRMADA",

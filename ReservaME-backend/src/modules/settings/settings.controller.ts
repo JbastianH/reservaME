@@ -4,9 +4,14 @@ import {
   Get,
   Patch,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import type { TenantRequest } from '../../common/tenant/tenant-request.interface';
 import { PrismaService } from '../../config/prisma.service';
 import { Auth } from '../../common/decorators/auth.decorator';
+
+type RequestAutenticado = TenantRequest & Request;
 
 @Controller('admin/settings')
 export class SettingsController {
@@ -14,11 +19,14 @@ export class SettingsController {
 
   @Auth('ADMIN')
   @Get()
-  async get() {
+  async get(@Req() req: RequestAutenticado) {
     const settings = await this.prisma.appSetting.upsert({
-      where: { id: 1 },
+      where: { tenantId: req.tenant!.id },
       update: {},
-      create: { id: 1, reminderHoursBefore: 24 },
+      create: {
+        tenantId: req.tenant!.id,
+        reminderHoursBefore: 24,
+      },
     });
 
     return { ok: true, settings };
@@ -26,7 +34,10 @@ export class SettingsController {
 
   @Auth('ADMIN')
   @Patch()
-  async update(@Body() dto: { reminderHoursBefore: number }) {
+  async update(
+    @Req() req: RequestAutenticado,
+    @Body() dto: { reminderHoursBefore: number },
+  ) {
     const h = Number(dto.reminderHoursBefore);
 
     // Se valida rango razonable (1h a 168h = 7 días)
@@ -35,9 +46,12 @@ export class SettingsController {
     }
 
     const settings = await this.prisma.appSetting.upsert({
-      where: { id: 1 },
+      where: { tenantId: req.tenant!.id },
       update: { reminderHoursBefore: dto.reminderHoursBefore },
-      create: { id: 1, reminderHoursBefore: 24 },
+      create: {
+        tenantId: req.tenant!.id,
+        reminderHoursBefore: dto.reminderHoursBefore,
+      },
     });
 
     return { ok: true, settings };
