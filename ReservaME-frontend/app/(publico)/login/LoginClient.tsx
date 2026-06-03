@@ -7,6 +7,7 @@ import Link from "next/link"; // Importante para la navegación
 import { useSession } from "@/context/SesionProvider";
 import { apiPost } from "@/lib/api";
 import type { ApiError } from "@/lib/api";
+import { setToken } from "@/lib/auth-storage";
 
 type FormState = {
   email: string;
@@ -67,12 +68,17 @@ export default function LoginClient() {
     try {
       setLoading(true);
 
-      const data = await apiPost<{ ok: true; role: "ADMIN" | "BARBERO" }>(
+      const data = await apiPost<{
+        accessToken: string;
+        role: "SUPER_ADMIN" | "ADMIN" | "BARBERO";
+        tenantId: string | null;
+      }>(
         "/auth/login",
         { email: form.email.trim(), password: form.password },
         { auth: false },
       );
 
+      setToken(data.accessToken);
       document.cookie = "auth_flag=true; path=/; max-age=86400; SameSite=Lax";
 
       await refetchSession();
@@ -82,7 +88,8 @@ export default function LoginClient() {
         return;
       }
 
-      if (data.role === "ADMIN") router.replace("/admin");
+      if (data.role === "SUPER_ADMIN") router.replace("/super-admin");
+      else if (data.role === "ADMIN") router.replace("/admin");
       else if (data.role === "BARBERO") router.replace("/barbero");
       else router.replace("/");
     } catch (err) {

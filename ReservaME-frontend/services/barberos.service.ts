@@ -6,7 +6,6 @@ export type PublicBarberoItem = {
   slug: string;
   bio?: string | null;
   phone?: string | null;
-  linkSetmore: string;
   photoUrl?: string | null;
 
   portfolioImages: {

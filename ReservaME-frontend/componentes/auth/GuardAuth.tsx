@@ -28,9 +28,7 @@ export default function GuardiaAuth({ children, rolesPermitidos }: Props) {
 
     async function check() {
       try {
-        // Importante: auth:false => NO intenta poner Authorization con token local
-        // pero igual manda cookies porque tu apiFetch ya usa credentials:"include".
-        const me = await apiGet<MeResponse>("/auth/me", { auth: false });
+        const me = await apiGet<MeResponse>("/auth/me");
 
         if (cancelled) return;
 
