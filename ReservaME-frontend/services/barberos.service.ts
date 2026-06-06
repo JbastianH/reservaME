@@ -29,18 +29,25 @@ export type PublicServicioDeBarberoItem = {
   };
 };
 
-export function listarBarberosPublico(q?: string) {
+export function listarBarberosPublico(
+  q?: string,
+  tenantHost?: string | null,
+) {
   const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-  return apiGet<PublicBarberoItem[]>(`/public/barberos${qs}`, { auth: false });
+
+  return apiGet<PublicBarberoItem[]>(`/public/barberos${qs}`, {
+    auth: false,
+    tenantHost,
+  });
 }
 
-export function obtenerBarberoPublico(slug: string) {
-  return apiGet<PublicBarberoItem>(`/public/barberos/${encodeURIComponent(slug)}`, { auth: false });
+export function obtenerBarberoPublico(slug: string, tenantHost?: string | null) {
+  return apiGet<PublicBarberoItem>(`/public/barberos/${encodeURIComponent(slug)}`, { auth: false, tenantHost });
 }
 
-export function listarServiciosDeBarberoPublico(slug: string) {
+export function listarServiciosDeBarberoPublico(slug: string, tenantHost?: string | null) {
   return apiGet<PublicServicioDeBarberoItem[]>(
     `/public/barberos/${encodeURIComponent(slug)}/servicios`,
-    { auth: false },
+    { auth: false, tenantHost },
   );
 }

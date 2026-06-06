@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { obtenerResumenReservaPublica } from "@/services/reservas-publicas.service";
 import PoliticaCancelacion from "@/componentes/publico/PoliticaCancelacion";
+import { headers } from "next/headers";
 
 function formatCLP(n: number) {
   try {
@@ -18,6 +19,9 @@ export default async function ReservaResumenPage({
   const sp = await searchParams;
   const id = (sp.id ?? "").trim();
 
+  const requestHeaders = await headers();
+  const tenantHost = requestHeaders.get("host");
+
   if (!id) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -31,7 +35,7 @@ export default async function ReservaResumenPage({
     );
   }
 
-  const r = await obtenerResumenReservaPublica(id);
+  const r = await obtenerResumenReservaPublica(id, tenantHost);
 
   const start = new Date(r.startAt);
   const end = new Date(r.endAt);

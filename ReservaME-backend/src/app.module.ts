@@ -44,6 +44,7 @@ import { ServiciosPublicosController } from "./modules/servicios-publicos/servic
 import { BarbersController } from "./modules/barbers/barbers.controller";
 import { BarberoMeController } from "./modules/barbers/barbero-me.controller";
 import { ReservasController } from "./modules/reservas/reservas.controller";
+import { SuperAdminTenantsModule } from "./modules/super-admin-tenants/super-admin-tenants.module";
 
 
 
@@ -85,6 +86,7 @@ import { ReservasController } from "./modules/reservas/reservas.controller";
     SettingsModule,
     ScheduleModule.forRoot(),
     ProductosModule,
+    SuperAdminTenantsModule,
   
   ],
   controllers: [AppController],

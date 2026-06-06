@@ -20,16 +20,36 @@ export class SettingsController {
   @Auth('ADMIN')
   @Get()
   async get(@Req() req: RequestAutenticado) {
-    const settings = await this.prisma.appSetting.upsert({
-      where: { tenantId: req.tenant!.id },
-      update: {},
-      create: {
-        tenantId: req.tenant!.id,
-        reminderHoursBefore: 24,
-      },
+    const tenantId = req.tenant!.id;
+
+    const existente = await this.prisma.appSetting.findUnique({
+      where: { tenantId },
     });
 
-    return { ok: true, settings };
+    if (existente) {
+      return { ok: true, settings: existente };
+    }
+
+    try {
+      const settings = await this.prisma.appSetting.create({
+        data: {
+          tenantId,
+          reminderHoursBefore: 24,
+        },
+      });
+
+      return { ok: true, settings };
+    } catch {
+      const settings = await this.prisma.appSetting.findUnique({
+        where: { tenantId },
+      });
+
+      if (!settings) {
+        throw new BadRequestException('No se pudo cargar la configuración.');
+      }
+
+      return { ok: true, settings };
+    }
   }
 
   @Auth('ADMIN')

@@ -29,8 +29,10 @@ export class AuthService {
     private readonly mail: MailService,
   ) {}
 
-
-  async login(tenantId: string, dto: LoginDto): Promise<{
+  async login(
+    tenantId: string | undefined,
+    dto: LoginDto,
+  ): Promise<{
     accessToken: string;
     role: UserRole;
     tenantId: string | null;
@@ -51,8 +53,10 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Credenciales inválidas.');
 
-    if (user.role !== 'SUPER_ADMIN' && user.tenantId !== tenantId) {
-      throw new UnauthorizedException('Credenciales inválidas.');
+    if (user.role !== 'SUPER_ADMIN') {
+      if (!tenantId || user.tenantId !== tenantId) {
+        throw new UnauthorizedException('Credenciales inválidas.');
+      }
     }
 
     if (!user.isActive) throw new ForbiddenException('Cuenta no activada.');
@@ -336,7 +340,8 @@ export class AuthService {
     if (!user) {
       return {
         ok: true,
-        mensaje: 'Si el correo está registrado, recibirás un enlace de recuperación.',
+        mensaje:
+          'Si el correo está registrado, recibirás un enlace de recuperación.',
       };
     }
 
@@ -376,7 +381,8 @@ export class AuthService {
 
     return {
       ok: true,
-      mensaje: 'Si el correo está registrado, recibirás un enlace de recuperación.',
+      mensaje:
+        'Si el correo está registrado, recibirás un enlace de recuperación.',
     };
   }
 
@@ -414,6 +420,9 @@ export class AuthService {
       }),
     ]);
 
-    return { ok: true, mensaje: 'Tu contraseña ha sido actualizada correctamente.' };
+    return {
+      ok: true,
+      mensaje: 'Tu contraseña ha sido actualizada correctamente.',
+    };
   }
 }
