@@ -14,8 +14,11 @@ export type PublicProductoItem = {
 };
 
 // La función solicita el listado de productos habilitados para la vista del cliente.
-export function listarProductosPublico() {
-  return apiGet<PublicProductoItem[]>('/productos/public', { auth: false });
+export function listarProductosPublico(tenantHost?: string | null) {
+  return apiGet<PublicProductoItem[]>(`/productos/public`, {
+    auth: false,
+    tenantHost,
+  });
 }
 
 // La función recupera el inventario completo, incluyendo elementos inactivos, para el panel de gestión.

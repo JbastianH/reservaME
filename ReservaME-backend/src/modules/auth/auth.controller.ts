@@ -44,7 +44,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { accessToken, role, tenantId } = await this.authService.login(
-      req.tenant!.id,
+      req.tenant?.id,
       dto,
     );
 

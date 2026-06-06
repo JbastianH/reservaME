@@ -7,6 +7,7 @@ import Link from "next/link"; // Importante para la navegación
 import { useSession } from "@/context/SesionProvider";
 import { apiPost } from "@/lib/api";
 import type { ApiError } from "@/lib/api";
+import { setToken } from "@/lib/auth-storage";
 
 type FormState = {
   email: string;
@@ -67,22 +68,21 @@ export default function LoginClient() {
     try {
       setLoading(true);
 
-      const data = await apiPost<{ ok: true; role: "ADMIN" | "BARBERO" }>(
-        "/auth/login",
-        { email: form.email.trim(), password: form.password },
-        { auth: false },
-      );
+      const data = await apiPost<{
+        ok: true;
+        accessToken: string;
+        role: "SUPER_ADMIN" | "ADMIN" | "BARBERO";
+        tenantId: string | null;
+      }>("/auth/login", { email: form.email.trim(), password: form.password }, { auth: false });
+
+      setToken(data.accessToken);
 
       document.cookie = "auth_flag=true; path=/; max-age=86400; SameSite=Lax";
 
       await refetchSession();
 
-      if (redirect) {
-        router.replace(redirect);
-        return;
-      }
-
-      if (data.role === "ADMIN") router.replace("/admin");
+      if (data.role === "SUPER_ADMIN") router.replace("/super-admin");
+      else if (data.role === "ADMIN") router.replace("/admin");
       else if (data.role === "BARBERO") router.replace("/barbero");
       else router.replace("/");
     } catch (err) {
@@ -135,9 +135,9 @@ export default function LoginClient() {
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-neutral-200">Contraseña</label>
               {/* ENLACE A RECUPERACIÓN */}
-              <Link 
-                href="/login/forgot-password" 
-                className="text-xs text-neutral-400 hover:text-white transition-colors"
+              <Link
+                href="/login/forgot-password"
+                className="text-xs text-neutral-400 transition-colors hover:text-white"
               >
                 ¿Olvidaste tu contraseña?
               </Link>

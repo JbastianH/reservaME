@@ -9,6 +9,7 @@ export class TenantMiddleware implements NestMiddleware {
 
   async use(req: TenantRequest, _res: Response, next: NextFunction) {
     const tenantHostHeader = req.headers['x-tenant-host'];
+
     const tenantHost = Array.isArray(tenantHostHeader)
       ? tenantHostHeader[0]
       : tenantHostHeader;
@@ -16,8 +17,38 @@ export class TenantMiddleware implements NestMiddleware {
     const origin = req.headers.origin;
     const host = tenantHost ?? origin ?? req.headers.host;
 
+    const hostNormalizado = this.normalizarHost(host);
+
+    // Dominio global de ReservaME (NO tenant)
+    if (hostNormalizado === 'admin.localhost') {
+      next();
+      return;
+    }
+
     const tenant = await this.tenantResolver.resolveByHost(host);
+
     req.tenant = tenant;
+
     next();
+  }
+
+  private normalizarHost(hostRaw?: string) {
+    if (!hostRaw) return undefined;
+
+    try {
+      const url = hostRaw.startsWith('http') ? new URL(hostRaw) : null;
+
+      const host = url ? url.host : hostRaw;
+
+      return host
+        .split(':')[0]
+        ?.replace(/^www\./, '')
+        .toLowerCase();
+    } catch {
+      return hostRaw
+        .split(':')[0]
+        ?.replace(/^www\./, '')
+        .toLowerCase();
+    }
   }
 }

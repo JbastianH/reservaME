@@ -44,12 +44,25 @@ export type ReservaResumenPublicoResponse = {
   service: { id: string; name: string };
 };
 
-export function crearReservaPublica(payload: CrearReservaPublicaPayload) {
-  return apiPost<CrearReservaPublicaResponse>("/public/reservas", payload, { auth: false });
+export function crearReservaPublica(
+  payload: CrearReservaPublicaPayload,
+  tenantHost?: string | null,
+) {
+  return apiPost<CrearReservaPublicaResponse>("/public/reservas", payload, {
+    auth: false,
+    tenantHost,
+  });
 }
 
-export function obtenerResumenReservaPublica(id: string) {
-  return apiGet<ReservaResumenPublicoResponse>(`/public/reservas/${encodeURIComponent(id)}`, {
-    auth: false,
-  });
+export function obtenerResumenReservaPublica(
+  id: string,
+  tenantHost?: string | null,
+) {
+  return apiGet<ReservaResumenPublicoResponse>(
+    `/public/reservas/${encodeURIComponent(id)}`,
+    {
+      auth: false,
+      tenantHost,
+    },
+  );
 }

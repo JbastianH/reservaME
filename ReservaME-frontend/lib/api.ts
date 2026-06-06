@@ -1,5 +1,6 @@
 // /lib/api.ts
 import { API_BASE_URL } from "@/lib/constants";
+import { getToken } from "@/lib/auth-storage";
 export { API_BASE_URL };
 
 export type ApiError = {
@@ -10,7 +11,13 @@ export type ApiError = {
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;
+  tenantHost?: string | null;
 };
+
+function getTenantHost(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.location.host;
+}
 
 async function parseErrorBody(res: Response): Promise<unknown> {
   const contentType = res.headers.get("content-type") ?? "";
@@ -24,9 +31,19 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const url = `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
 
   const headers = new Headers(options.headers);
+  const tenantHost = options.tenantHost ?? getTenantHost();
+  if (tenantHost && !headers.has("x-tenant-host")) {
+    headers.set("x-tenant-host", tenantHost);
+  }
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   const auth = options.auth ?? true;
+  if (auth && !headers.has("Authorization")) {
+    const token = getToken();
+    if (token && token !== "undefined" && token !== "null") {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
 
   const res = await fetch(url, {
     ...options,

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { headers } from "next/headers";
 import Image from "next/image";
 import TarjetaServicio from "@/componentes/publico/TarjetaServicio";
 import {
@@ -25,11 +25,13 @@ function safeImageSrc(src?: string | null) {
 }
 
 export default async function BarberoPublicPage({ params }: { params: Promise<{ slug: string }> }) {
+  const requestHeaders = await headers();
+  const tenantHost = requestHeaders.get("host");
   const { slug } = await params;
 
-  const barber = await obtenerBarberoPublico(slug);
-  const servicios = await listarServiciosDeBarberoPublico(slug);
-  const resenas = await listarResenasPorBarberoPublico(slug);
+  const barber = await obtenerBarberoPublico(slug, tenantHost);
+  const servicios = await listarServiciosDeBarberoPublico(slug, tenantHost);
+  const resenas = await listarResenasPorBarberoPublico(slug, tenantHost);
 
   const imgSrc = safeImageSrc(barber.photoUrl);
   const ini = initials(barber.name);

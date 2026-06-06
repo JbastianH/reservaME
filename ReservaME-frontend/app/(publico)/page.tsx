@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import CarruselBarberosSwiper from "@/componentes/publico/CarruselBarberos";
 import MapaBarberia from "@/componentes/publico/MapaBarberia";
 import { listarBarberosPublico } from "@/services/barberos.service";
@@ -5,9 +6,14 @@ import { listarProductosPublico } from "@/services/productos.service";
 import CarruselListaProductos from "@/componentes/publico/CarruselProductos";
 
 export default async function HomePublica() {
+
+  const requestHeaders = await headers();
+
+  const tenantHost = requestHeaders.get("host");
   // Se ejecutan ambas peticiones al backend de NestJS
-  const barberos = await listarBarberosPublico();
-  const productos = await listarProductosPublico();
+  const barberos = await listarBarberosPublico(undefined, tenantHost);
+
+  const productos = await listarProductosPublico(tenantHost);
 
   return (
     <main className="min-h-screen bg-black">
