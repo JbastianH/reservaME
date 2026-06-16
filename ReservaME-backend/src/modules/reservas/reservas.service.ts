@@ -19,6 +19,61 @@ export class ReservasService {
     private readonly mail: MailService,
   ) {}
 
+  private async obtenerTenantDomainOrThrow(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ) {
+    const tenant = await tx.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: {
+        domain: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
+
+    return tenant.domain;
+  }
+
+  private construirUrlFrontendTenant(
+    tenantDomain: string | null | undefined,
+    path: string,
+  ) {
+    const domain = tenantDomain?.trim();
+
+    if (!domain) {
+      const frontendUrl = (
+        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
+      ).replace(/\/$/, '');
+
+      return `${frontendUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
+    let domainLimpio = domain.replace(/\/$/, '');
+
+    const tieneProtocolo =
+      domainLimpio.startsWith('http://') || domainLimpio.startsWith('https://');
+
+    const esLocalhost = domainLimpio.includes('localhost');
+
+    const tienePuerto = /:\d+$/.test(domainLimpio);
+
+    if (esLocalhost && !tienePuerto) {
+      domainLimpio = `${domainLimpio}:3001`;
+    }
+
+    const baseUrl = tieneProtocolo
+      ? domainLimpio
+      : `${esLocalhost ? 'http' : 'https'}://${domainLimpio}`;
+
+    return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
   private parseDateOrThrow(value?: string, campo?: string): Date | undefined {
     if (!value) return undefined;
     const d = new Date(value);
@@ -149,11 +204,12 @@ export class ReservasService {
         reservaId,
       );
 
-      const frontendUrl = (
-        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-      ).replace(/\/$/, '');
+      const tenantDomain = await this.obtenerTenantDomainOrThrow(tx, tenantId);
 
-      const link = `${frontendUrl}/resena/${encodeURIComponent(tokenPlano)}`;
+      const link = this.construirUrlFrontendTenant(
+        tenantDomain,
+        `/resena/${encodeURIComponent(tokenPlano)}`,
+      );
 
       await this.mail.enviarResena({
         to: reserva.clientEmail,
@@ -233,11 +289,12 @@ export class ReservasService {
         reservaId,
       );
 
-      const frontendUrl = (
-        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-      ).replace(/\/$/, '');
+      const tenantDomain = await this.obtenerTenantDomainOrThrow(tx, tenantId);
 
-      const link = `${frontendUrl}/resena/${encodeURIComponent(tokenPlano)}`;
+      const link = this.construirUrlFrontendTenant(
+        tenantDomain,
+        `/resena/${encodeURIComponent(tokenPlano)}`,
+      );
 
       await this.mail.enviarResena({
         to: reserva.clientEmail,
@@ -428,108 +485,108 @@ export class ReservasService {
     reservaId: string,
     startAtIso: string,
   ) {
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const reserva = await tx.reservation.findFirst({
-        where: { id: reservaId, tenantId },
-        select: {
-          id: true,
-          status: true,
-          barberId: true,
-          durationFinalMin: true,
-          clientEmail: true,
-          clientName: true,
-          startAt: true,
-          endAt: true,
-          priceFinal: true,
-          comment: true,
-          barber: { select: { id: true, name: true } },
-          service: { select: { id: true, name: true } },
-        },
-      });
-
-      if (!reserva) throw new NotFoundException('Reserva no encontrada.');
-
-      if (reserva.status === 'CANCELADA') {
-        throw new BadRequestException(
-          'No se puede reprogramar una reserva cancelada.',
-        );
-      }
-
-      if (reserva.status === 'COMPLETADA') {
-        throw new BadRequestException(
-          'No se puede reprogramar una reserva completada.',
-        );
-      }
-
-      if (reserva.status !== 'CONFIRMADA') {
-        throw new BadRequestException(
-          'Solo se pueden reprogramar reservas confirmadas.',
-        );
-      }
-
-      const startAt = new Date(startAtIso);
-
-      if (Number.isNaN(startAt.getTime())) {
-        throw new BadRequestException(
-          'El parámetro "startAt" tiene un formato inválido.',
-        );
-      }
-
-      const durationMin = reserva.durationFinalMin;
-
-      if (!durationMin || durationMin <= 0) {
-        throw new BadRequestException(
-          'La reserva no tiene duración válida para reprogramar.',
-        );
-      }
-
-      const endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
-
-      await this.validarNoSolapamiento(
-        tenantId,
-        reserva.barberId,
-        startAt,
-        endAt,
-        reserva.id,
-      );
-
-      const updated = await tx.reservation.update({
-        where: { id: reserva.id },
-        data: { startAt, endAt, reminderSentAt: null },
-        select: {
-          id: true,
-          startAt: true,
-          endAt: true,
-          durationFinalMin: true,
-          priceFinal: true,
-          clientEmail: true,
-          clientName: true,
-          comment: true,
-          barber: { select: { name: true } },
-          service: { select: { name: true } },
-        },
-      });
-
-      const { tokenPlano } = await this.generarTokenGestionReserva(
-        tx,
-        tenantId,
-        reserva.id,
-      );
-
-      const linkGestion = `${frontendUrl}/reserva/gestionar/${encodeURIComponent(
-        tokenPlano,
-      )}`;
-
-      return { updated, linkGestion };
+    const reserva = await this.prisma.reservation.findFirst({
+      where: { id: reservaId, tenantId },
+      select: {
+        id: true,
+        status: true,
+        barberId: true,
+        durationFinalMin: true,
+      },
     });
+
+    if (!reserva) throw new NotFoundException('Reserva no encontrada.');
+
+    if (reserva.status === 'CANCELADA') {
+      throw new BadRequestException(
+        'No se puede reprogramar una reserva cancelada.',
+      );
+    }
+
+    if (reserva.status === 'COMPLETADA') {
+      throw new BadRequestException(
+        'No se puede reprogramar una reserva completada.',
+      );
+    }
+
+    if (reserva.status !== 'CONFIRMADA') {
+      throw new BadRequestException(
+        'Solo se pueden reprogramar reservas confirmadas.',
+      );
+    }
+
+    const startAt = new Date(startAtIso);
+
+    if (Number.isNaN(startAt.getTime())) {
+      throw new BadRequestException(
+        'El parámetro "startAt" tiene un formato inválido.',
+      );
+    }
+
+    const durationMin = reserva.durationFinalMin;
+
+    if (!durationMin || durationMin <= 0) {
+      throw new BadRequestException(
+        'La reserva no tiene duración válida para reprogramar.',
+      );
+    }
+
+    const endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
+
+    await this.validarNoSolapamiento(
+      tenantId,
+      reserva.barberId,
+      startAt,
+      endAt,
+      reserva.id,
+    );
+
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.reservation.update({
+          where: { id: reserva.id },
+          data: { startAt, endAt, reminderSentAt: null },
+          select: {
+            id: true,
+            startAt: true,
+            endAt: true,
+            durationFinalMin: true,
+            priceFinal: true,
+            clientEmail: true,
+            clientName: true,
+            comment: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+          },
+        });
+
+        const { tokenPlano } = await this.generarTokenGestionReserva(
+          tx,
+          tenantId,
+          reserva.id,
+        );
+
+        const tenantDomain = await this.obtenerTenantDomainOrThrow(
+          tx,
+          tenantId,
+        );
+
+        const linkGestion = this.construirUrlFrontendTenant(
+          tenantDomain,
+          `/reserva/gestionar/${encodeURIComponent(tokenPlano)}`,
+        );
+
+        return { updated, linkGestion };
+      },
+      {
+        timeout: 10000,
+      },
+    );
 
     await this.mail.enviarReservaReprogramadaConGestion({
       to: result.updated.clientEmail,
       nombre: result.updated.clientName,
+      tenantId,
       resumen: {
         barberName: result.updated.barber?.name ?? '—',
         serviceName: result.updated.service?.name ?? '—',
@@ -551,125 +608,125 @@ export class ReservasService {
     reservaId: string,
     startAtIso: string,
   ) {
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const barber = await tx.barber.findFirst({
-        where: { tenantId, userId },
-        select: { id: true },
-      });
-
-      if (!barber) {
-        throw new NotFoundException(
-          'No se encontró el perfil de barbero asociado a tu usuario.',
-        );
-      }
-
-      const reserva = await tx.reservation.findFirst({
-        where: { id: reservaId, tenantId },
-        select: {
-          id: true,
-          barberId: true,
-          status: true,
-          durationFinalMin: true,
-          clientEmail: true,
-          clientName: true,
-          startAt: true,
-          endAt: true,
-          priceFinal: true,
-          comment: true,
-          barber: { select: { name: true } },
-          service: { select: { name: true } },
-        },
-      });
-
-      if (!reserva) throw new NotFoundException('Reserva no encontrada.');
-
-      if (reserva.barberId !== barber.id) {
-        throw new BadRequestException(
-          'No tienes permiso para reprogramar esta reserva.',
-        );
-      }
-
-      if (reserva.status === 'CANCELADA') {
-        throw new BadRequestException(
-          'No se puede reprogramar una reserva cancelada.',
-        );
-      }
-
-      if (reserva.status === 'COMPLETADA') {
-        throw new BadRequestException(
-          'No se puede reprogramar una reserva completada.',
-        );
-      }
-
-      if (reserva.status !== 'CONFIRMADA') {
-        throw new BadRequestException(
-          'Solo se pueden reprogramar reservas confirmadas.',
-        );
-      }
-
-      const startAt = new Date(startAtIso);
-
-      if (Number.isNaN(startAt.getTime())) {
-        throw new BadRequestException(
-          'El parámetro "startAt" tiene un formato inválido.',
-        );
-      }
-
-      const durationMin = reserva.durationFinalMin;
-
-      if (!durationMin || durationMin <= 0) {
-        throw new BadRequestException(
-          'La reserva no tiene duración válida para reprogramar.',
-        );
-      }
-
-      const endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
-
-      await this.validarNoSolapamiento(
-        tenantId,
-        reserva.barberId,
-        startAt,
-        endAt,
-        reserva.id,
-      );
-
-      const updated = await tx.reservation.update({
-        where: { id: reserva.id },
-        data: { startAt, endAt, reminderSentAt: null },
-        select: {
-          id: true,
-          startAt: true,
-          endAt: true,
-          durationFinalMin: true,
-          priceFinal: true,
-          clientEmail: true,
-          clientName: true,
-          comment: true,
-          barber: { select: { name: true } },
-          service: { select: { name: true } },
-        },
-      });
-
-      const { tokenPlano } = await this.generarTokenGestionReserva(
-        tx,
-        tenantId,
-        reserva.id,
-      );
-
-      const linkGestion = `${frontendUrl}/reserva/gestionar/${encodeURIComponent(
-        tokenPlano,
-      )}`;
-
-      return { updated, linkGestion };
+    const barber = await this.prisma.barber.findFirst({
+      where: { tenantId, userId },
+      select: { id: true },
     });
+
+    if (!barber) {
+      throw new NotFoundException(
+        'No se encontró el perfil de barbero asociado a tu usuario.',
+      );
+    }
+
+    const reserva = await this.prisma.reservation.findFirst({
+      where: { id: reservaId, tenantId },
+      select: {
+        id: true,
+        barberId: true,
+        status: true,
+        durationFinalMin: true,
+      },
+    });
+
+    if (!reserva) throw new NotFoundException('Reserva no encontrada.');
+
+    if (reserva.barberId !== barber.id) {
+      throw new BadRequestException(
+        'No tienes permiso para reprogramar esta reserva.',
+      );
+    }
+
+    if (reserva.status === 'CANCELADA') {
+      throw new BadRequestException(
+        'No se puede reprogramar una reserva cancelada.',
+      );
+    }
+
+    if (reserva.status === 'COMPLETADA') {
+      throw new BadRequestException(
+        'No se puede reprogramar una reserva completada.',
+      );
+    }
+
+    if (reserva.status !== 'CONFIRMADA') {
+      throw new BadRequestException(
+        'Solo se pueden reprogramar reservas confirmadas.',
+      );
+    }
+
+    const startAt = new Date(startAtIso);
+
+    if (Number.isNaN(startAt.getTime())) {
+      throw new BadRequestException(
+        'El parámetro "startAt" tiene un formato inválido.',
+      );
+    }
+
+    const durationMin = reserva.durationFinalMin;
+
+    if (!durationMin || durationMin <= 0) {
+      throw new BadRequestException(
+        'La reserva no tiene duración válida para reprogramar.',
+      );
+    }
+
+    const endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
+
+    await this.validarNoSolapamiento(
+      tenantId,
+      reserva.barberId,
+      startAt,
+      endAt,
+      reserva.id,
+    );
+
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.reservation.update({
+          where: { id: reserva.id },
+          data: { startAt, endAt, reminderSentAt: null },
+          select: {
+            id: true,
+            startAt: true,
+            endAt: true,
+            durationFinalMin: true,
+            priceFinal: true,
+            clientEmail: true,
+            clientName: true,
+            comment: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+          },
+        });
+
+        const { tokenPlano } = await this.generarTokenGestionReserva(
+          tx,
+          tenantId,
+          reserva.id,
+        );
+
+        const tenantDomain = await this.obtenerTenantDomainOrThrow(
+          tx,
+          tenantId,
+        );
+
+        const linkGestion = this.construirUrlFrontendTenant(
+          tenantDomain,
+          `/reserva/gestionar/${encodeURIComponent(tokenPlano)}`,
+        );
+
+        return { updated, linkGestion };
+      },
+      {
+        timeout: 10000,
+      },
+    );
 
     await this.mail.enviarReservaReprogramadaConGestion({
       to: result.updated.clientEmail,
       nombre: result.updated.clientName,
+      tenantId,
       resumen: {
         barberName: result.updated.barber?.name ?? '—',
         serviceName: result.updated.service?.name ?? '—',

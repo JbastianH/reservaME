@@ -45,6 +45,9 @@ import { BarbersController } from "./modules/barbers/barbers.controller";
 import { BarberoMeController } from "./modules/barbers/barbero-me.controller";
 import { ReservasController } from "./modules/reservas/reservas.controller";
 import { SuperAdminTenantsModule } from "./modules/super-admin-tenants/super-admin-tenants.module";
+import { TenantPublicoModule } from './modules/tenant-publico/tenant-publico.module';
+import { TenantPublicoController } from "./modules/tenant-publico/tenant-publico.controller";
+import { AdminTenantModule } from "./modules/admin-tenant/admin-tenant.module";
 
 
 
@@ -87,6 +90,8 @@ import { SuperAdminTenantsModule } from "./modules/super-admin-tenants/super-adm
     ScheduleModule.forRoot(),
     ProductosModule,
     SuperAdminTenantsModule,
+    TenantPublicoModule,
+    AdminTenantModule
   
   ],
   controllers: [AppController],
@@ -125,6 +130,8 @@ export class AppModule implements NestModule {
       "auth/admin/usuarios/reenviar-activacion",
       "auth/solicitar-recuperacion",
       ReservasController,
+      TenantPublicoController,
+      'admin/tenant/configuracion',
     );
   }
 

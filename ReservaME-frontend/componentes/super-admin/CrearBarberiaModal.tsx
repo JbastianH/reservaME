@@ -7,6 +7,8 @@ import {
 } from "@/services/super-admin-tenants.service";
 import type { ApiError } from "@/lib/api";
 import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import { FUENTES_TENANT, FUENTE_TENANT_DEFAULT } from "@/lib/fuentes-tenant";
+import { obtenerVariableFuente } from "@/lib/fuentes-css";
 
 type Props = {
   open: boolean;
@@ -19,11 +21,12 @@ const initialForm: CrearTenantPayload = {
   domain: "",
   adminEmail: "",
   address: "",
+  instagramUrl: "",
   primaryColor: "#000000",
   secondaryColor: "#FFFFFF",
   headerColor: "#000000",
   footerColor: "#000000",
-  fontFamily: "Inter",
+  fontFamily: FUENTE_TENANT_DEFAULT,
   isActive: true,
 };
 
@@ -35,10 +38,9 @@ export default function CrearBarberiaModal({ open, onClose, onCreated }: Props) 
 
   if (!open) return null;
 
-  function update<K extends keyof CrearTenantPayload>(
-    key: K,
-    value: CrearTenantPayload[K],
-  ) {
+  const fuentePreview = obtenerVariableFuente(form.fontFamily);
+
+  function update<K extends keyof CrearTenantPayload>(key: K, value: CrearTenantPayload[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -85,11 +87,12 @@ export default function CrearBarberiaModal({ open, onClose, onCreated }: Props) 
         domain: form.domain.trim(),
         adminEmail: form.adminEmail.trim(),
         address: form.address?.trim() || undefined,
+        instagramUrl: form.instagramUrl?.trim() || undefined,
         primaryColor: form.primaryColor,
         secondaryColor: form.secondaryColor,
         headerColor: form.headerColor,
         footerColor: form.footerColor,
-        fontFamily: form.fontFamily?.trim() || "Inter",
+        fontFamily: form.fontFamily?.trim() || FUENTE_TENANT_DEFAULT,
         isActive: form.isActive ?? true,
       };
 
@@ -118,7 +121,7 @@ export default function CrearBarberiaModal({ open, onClose, onCreated }: Props) 
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-        <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
+        <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-neutral-950">Crear barbería</h2>
@@ -168,13 +171,34 @@ export default function CrearBarberiaModal({ open, onClose, onCreated }: Props) 
                 required
               />
 
-              <div className="sm:col-span-2">
-                <Campo
-                  label="Dirección"
-                  value={form.address ?? ""}
-                  onChange={(v) => update("address", v)}
-                  placeholder="Enlace Google Maps"
+              <Campo
+                label="Dirección"
+                value={form.address ?? ""}
+                onChange={(v) => update("address", v)}
+                placeholder="Enlace Google Maps"
+              />
+
+              <Campo
+                label="Instagram"
+                value={form.instagramUrl ?? ""}
+                onChange={(v) => update("instagramUrl", v)}
+                placeholder="https://www.instagram.com/tu_barberia"
+              />
+
+              <div className="grid items-center gap-4 sm:col-span-2 lg:grid-cols-[minmax(280px,420px)_minmax(260px,360px)]">
+                <CampoTipografia
+                  value={form.fontFamily ?? FUENTE_TENANT_DEFAULT}
+                  onChange={(value) => update("fontFamily", value)}
+                  disabled={loading}
                 />
+
+                <div className="flex justify-center lg:justify-start">
+                  <VistaPreviaTipografia
+                    nombre={form.name}
+                    fontFamily={fuentePreview}
+                    fuenteSeleccionada={form.fontFamily ?? FUENTE_TENANT_DEFAULT}
+                  />
+                </div>
               </div>
 
               <CampoColor
@@ -268,6 +292,95 @@ function Campo({
   );
 }
 
+function CampoTipografia({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="block">
+      <span className="text-xs font-semibold text-neutral-600">Tipografía</span>
+
+      <div className="mt-2 max-h-[360px] overflow-y-auto rounded-2xl border border-neutral-300 bg-white p-2">
+        <div className="grid gap-2">
+          {FUENTES_TENANT.map((fuente) => {
+            const activa = value === fuente.value;
+            const fuentePreview = obtenerVariableFuente(fuente.value);
+
+            return (
+              <button
+                key={fuente.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange(fuente.value)}
+                className={`rounded-xl border px-4 py-3 text-left transition ${
+                  activa
+                    ? "border-neutral-950 bg-neutral-950 text-white"
+                    : "border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-50"
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xl leading-tight" style={{ fontFamily: fuentePreview }}>
+                      {fuente.label}
+                    </p>
+
+                    <p className={`mt-1 text-xs ${activa ? "text-white/70" : "text-neutral-500"}`}>
+                      {fuente.descripcion}
+                    </p>
+                  </div>
+
+                  {activa ? (
+                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-neutral-950">
+                      Activa
+                    </span>
+                  ) : null}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+function VistaPreviaTipografia({
+  nombre,
+  fontFamily,
+  fuenteSeleccionada,
+}: {
+  nombre: string;
+  fontFamily: string;
+  fuenteSeleccionada: string;
+}) {
+  return (
+    <div className="w-full max-w-[360px] rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
+      <p className="text-center text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
+        Vista previa tipográfica
+      </p>
+
+      <p
+        className="mt-3 line-clamp-1 text-center text-2xl font-semibold text-neutral-950"
+        style={{ fontFamily }}
+      >
+        {nombre.trim() || "Nombre de la barbería"}
+      </p>
+
+      <p className="mt-2 line-clamp-2 text-center text-sm text-neutral-600" style={{ fontFamily }}>
+        Reserva con tu barbero de confianza.
+      </p>
+
+      <p className="mt-3 text-center text-xs text-neutral-500">
+        Fuente: <span className="font-semibold text-neutral-800">{fuenteSeleccionada}</span>
+      </p>
+    </div>
+  );
+}
+
 function CampoColor({
   label,
   value,
@@ -294,7 +407,7 @@ function CampoColor({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="#000000"
-          className="min-w-0 flex-1 bg-transparent text-sm uppercase text-neutral-800 outline-none"
+          className="min-w-0 flex-1 bg-transparent text-sm text-neutral-800 uppercase outline-none"
         />
 
         <div

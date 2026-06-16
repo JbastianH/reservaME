@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+
 type Props = {
   open: boolean;
   title: string;
@@ -23,28 +26,45 @@ export default function ConfirmDialog({
   onConfirm,
   onClose,
 }: Props) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!open || !mounted) return null;
+
+  const accentColor =
+    variant === "danger" ? "#dc2626" : variant === "warning" ? "#eab308" : "#ffffff";
 
   const confirmClass =
     variant === "danger"
       ? "bg-red-600 text-white hover:bg-red-700"
       : variant === "warning"
         ? "bg-yellow-500 text-black hover:bg-yellow-400"
-        : "bg-neutral-950 text-white hover:bg-neutral-800";
+        : "bg-white text-black hover:bg-neutral-200";
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <h2 className="text-xl font-bold text-neutral-950">{title}</h2>
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div
+        className="w-full max-w-md rounded-[2rem] border bg-neutral-950 p-6 text-center shadow-2xl"
+        style={{ borderColor: `${accentColor}66` }}
+      >
+        <div
+          className="mx-auto mb-5 h-1 w-20 rounded-full"
+          style={{ backgroundColor: accentColor }}
+        />
 
-        <p className="mt-3 text-sm leading-6 text-neutral-600">{message}</p>
+        <h2 className="text-xl font-bold text-white">{title}</h2>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <p className="mt-3 text-sm leading-6 text-white/60">{message}</p>
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
           <button
             type="button"
             disabled={loading}
             onClick={onClose}
-            className="rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100 disabled:opacity-50"
+            className="rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -59,6 +79,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

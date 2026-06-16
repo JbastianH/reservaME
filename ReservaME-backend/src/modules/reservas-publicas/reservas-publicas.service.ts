@@ -32,11 +32,21 @@ export class ReservasPublicasService {
     );
     const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000);
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
     const result = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.findFirst({
+        where: {
+          id: tenantId,
+          isActive: true,
+        },
+        select: {
+          domain: true,
+        },
+      });
+
+      if (!tenant) {
+        throw new BadRequestException('Tenant no válido o inactivo.');
+      }
+
       const barber = await tx.barber.findFirst({
         where: {
           id: dto.barberId,
@@ -159,7 +169,10 @@ export class ReservasPublicasService {
         },
       });
 
-      const linkGestion = `${frontendUrl}/reserva/gestionar/${tokenPlano}`;
+      const linkGestion = this.construirUrlFrontendTenant(
+        tenant.domain,
+        `/reserva/gestionar/${encodeURIComponent(tokenPlano)}`,
+      );
 
       return {
         reserva,
@@ -172,6 +185,7 @@ export class ReservasPublicasService {
     await this.mail.enviarResumenReservaConGestion({
       to: result.reserva.clientEmail,
       nombre: result.reserva.clientName,
+      tenantId,
       resumen: {
         barberName: result.barberName,
         serviceName: result.serviceName,
@@ -302,10 +316,6 @@ export class ReservasPublicasService {
     );
     const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000);
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
     const result = await this.prisma.$transaction(async (tx) => {
       const token = await tx.token.findUnique({
         where: { tokenHash },
@@ -396,6 +406,19 @@ export class ReservasPublicasService {
         data: { usedAt: new Date() },
       });
 
+      const tenant = await tx.tenant.findFirst({
+        where: {
+          id: reservaActualizada.tenantId,
+          isActive: true,
+        },
+        select: {
+          domain: true,
+        },
+      });
+
+      if (!tenant) {
+        throw new BadRequestException('Tenant no válido o inactivo.');
+      }
       const tokenPlanoNuevo = generarTokenSeguro(32);
       const tokenHashNuevo = hashToken(tokenPlanoNuevo);
 
@@ -419,7 +442,10 @@ export class ReservasPublicasService {
         },
       });
 
-      const linkGestionNuevo = `${frontendUrl}/reserva/gestionar/${tokenPlanoNuevo}`;
+      const linkGestionNuevo = this.construirUrlFrontendTenant(
+        tenant.domain,
+        `/reserva/gestionar/${encodeURIComponent(tokenPlanoNuevo)}`,
+      );
 
       return {
         reserva: reservaActualizada,
@@ -430,6 +456,7 @@ export class ReservasPublicasService {
     await this.mail.enviarReservaReprogramadaConGestion({
       to: result.reserva.clientEmail,
       nombre: result.reserva.clientName,
+      tenantId: result.reserva.tenantId,
       resumen: {
         barberName: result.reserva.barber.name,
         serviceName: result.reserva.service.name,
@@ -501,6 +528,40 @@ export class ReservasPublicasService {
         service: r.service,
       },
     };
+  }
+
+  private construirUrlFrontendTenant(
+    tenantDomain: string | null | undefined,
+    path: string,
+  ) {
+    const domain = tenantDomain?.trim();
+
+    if (!domain) {
+      const frontendUrl = (
+        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
+      ).replace(/\/$/, '');
+
+      return `${frontendUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
+    let domainLimpio = domain.replace(/\/$/, '');
+
+    const tieneProtocolo =
+      domainLimpio.startsWith('http://') || domainLimpio.startsWith('https://');
+
+    const esLocalhost = domainLimpio.includes('localhost');
+
+    const tienePuerto = /:\d+$/.test(domainLimpio);
+
+    if (esLocalhost && !tienePuerto) {
+      domainLimpio = `${domainLimpio}:3001`;
+    }
+
+    const baseUrl = tieneProtocolo
+      ? domainLimpio
+      : `${esLocalhost ? 'http' : 'https'}://${domainLimpio}`;
+
+    return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
   private parseIsoOrThrow(value: string, campo: string): Date {

@@ -60,6 +60,7 @@ export class SuperAdminTenantsService {
           domain,
           email: tenantEmail,
           address: dto.address?.trim() ?? null,
+          instagramUrl: this.normalizarInstagramUrl(dto.instagramUrl),
           isActive: dto.isActive ?? true,
           settings: {
             create: {
@@ -77,6 +78,7 @@ export class SuperAdminTenantsService {
           domain: true,
           email: true,
           address: true,
+          instagramUrl: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -141,6 +143,7 @@ export class SuperAdminTenantsService {
         domain: true,
         email: true,
         address: true,
+        instagramUrl: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -168,6 +171,7 @@ export class SuperAdminTenantsService {
         domain: true,
         email: true,
         address: true,
+        instagramUrl: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -219,6 +223,10 @@ export class SuperAdminTenantsService {
         domain,
         address:
           dto.address === undefined ? undefined : (dto.address?.trim() ?? null),
+        instagramUrl:
+          dto.instagramUrl === undefined
+            ? undefined
+            : this.normalizarInstagramUrl(dto.instagramUrl),
         isActive: dto.isActive,
         settings: {
           upsert: {
@@ -245,6 +253,7 @@ export class SuperAdminTenantsService {
         domain: true,
         email: true,
         address: true,
+        instagramUrl: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -261,6 +270,18 @@ export class SuperAdminTenantsService {
     const tenant = await this.prisma.tenant.update({
       where: { id },
       data: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        email: true,
+        address: true,
+        instagramUrl: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        settings: true,
+      },
     });
 
     return { ok: true, tenant };
@@ -272,6 +293,18 @@ export class SuperAdminTenantsService {
     const tenant = await this.prisma.tenant.update({
       where: { id },
       data: { isActive: false },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        email: true,
+        address: true,
+        instagramUrl: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        settings: true,
+      },
     });
 
     return { ok: true, tenant };
@@ -376,6 +409,14 @@ export class SuperAdminTenantsService {
       .replace(/^www\./, '')
       .split(':')[0]
       .toLowerCase();
+  }
+
+  private normalizarInstagramUrl(instagramUrl?: string | null) {
+    const url = instagramUrl?.trim();
+
+    if (!url) return null;
+
+    return url;
   }
 
   private getFrontendUrlForDomain(domain: string) {

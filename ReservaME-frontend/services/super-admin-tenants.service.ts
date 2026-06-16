@@ -1,5 +1,3 @@
-
-
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 
 export type TenantSettings = {
@@ -29,6 +27,7 @@ export type SuperAdminTenant = {
   domain: string;
   email: string | null;
   address: string | null;
+  instagramUrl: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -41,6 +40,7 @@ export type CrearTenantPayload = {
   domain: string;
   adminEmail: string;
   address?: string;
+  instagramUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
   headerColor?: string;
@@ -62,7 +62,6 @@ export type ActualizarTenantResponse = {
   ok: true;
   tenant: SuperAdminTenant;
 };
-
 
 export type ReenviarActivacionTenantResponse = {
   ok: true;
@@ -87,10 +86,7 @@ export function crearTenantSuperAdmin(payload: CrearTenantPayload) {
   return apiPost<CrearTenantResponse>("/super-admin/tenants", payload);
 }
 
-export function actualizarTenantSuperAdmin(
-  id: string,
-  payload: ActualizarTenantPayload,
-) {
+export function actualizarTenantSuperAdmin(id: string, payload: ActualizarTenantPayload) {
   return apiPatch<ActualizarTenantResponse>(`/super-admin/tenants/${id}`, payload);
 }
 
@@ -99,7 +95,5 @@ export function activarTenantSuperAdmin(id: string) {
 }
 
 export function desactivarTenantSuperAdmin(id: string) {
-  return apiPatch<ActualizarTenantResponse>(
-    `/super-admin/tenants/${id}/desactivar`,
-  );
+  return apiPatch<ActualizarTenantResponse>(`/super-admin/tenants/${id}/desactivar`);
 }

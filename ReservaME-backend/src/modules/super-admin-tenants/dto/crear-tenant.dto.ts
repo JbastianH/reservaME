@@ -24,7 +24,7 @@ export class CreateTenantDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(2000)
   address?: string;
 
   @IsOptional()
@@ -51,4 +51,8 @@ export class CreateTenantDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  instagramUrl?: string;
 }

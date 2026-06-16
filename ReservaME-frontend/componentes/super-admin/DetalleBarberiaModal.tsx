@@ -25,9 +25,7 @@ export default function DetalleBarberiaModal({ open, tenant, onClose }: Props) {
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-neutral-950">
-              Detalle de barbería
-            </h2>
+            <h2 className="text-xl font-bold text-neutral-950">Detalle de barbería</h2>
             <p className="mt-1 text-sm text-neutral-500">
               Información general del tenant seleccionado.
             </p>
@@ -48,15 +46,16 @@ export default function DetalleBarberiaModal({ open, tenant, onClose }: Props) {
           <DetalleItem label="Correo contacto" value={tenant.email ?? "Sin correo"} />
           <DetalleItem label="Correo admin" value={admin?.email ?? "Sin admin"} />
           <DetalleItem label="Dirección" value={tenant.address ?? "Sin dirección"} />
+
+          <DetalleLink label="Instagram" value={tenant.instagramUrl} emptyText="Sin Instagram" />
+
           <DetalleItem label="Estado" value={tenant.isActive ? "Activa" : "Inactiva"} />
           <DetalleItem label="Creada" value={formatDate(tenant.createdAt)} />
           <DetalleItem label="Actualizada" value={formatDate(tenant.updatedAt)} />
         </div>
 
         <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-          <h3 className="text-sm font-semibold text-neutral-900">
-            Configuración visual
-          </h3>
+          <h3 className="text-sm font-semibold text-neutral-900">Configuración visual</h3>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <ColorItem label="Primario" value={tenant.settings?.primaryColor ?? "#000000"} />
@@ -66,10 +65,7 @@ export default function DetalleBarberiaModal({ open, tenant, onClose }: Props) {
           </div>
 
           <div className="mt-4">
-            <DetalleItem
-              label="Tipografía"
-              value={tenant.settings?.fontFamily ?? "Inter"}
-            />
+            <DetalleItem label="Tipografía" value={tenant.settings?.fontFamily ?? "Inter"} />
           </div>
         </div>
 
@@ -91,7 +87,36 @@ function DetalleItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-neutral-200 p-3">
       <p className="text-xs font-semibold text-neutral-500">{label}</p>
-      <p className="mt-1 break-words text-sm text-neutral-950">{value}</p>
+      <p className="mt-1 text-sm break-words text-neutral-950">{value}</p>
+    </div>
+  );
+}
+
+function DetalleLink({
+  label,
+  value,
+  emptyText,
+}: {
+  label: string;
+  value?: string | null;
+  emptyText: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 p-3">
+      <p className="text-xs font-semibold text-neutral-500">{label}</p>
+
+      {value ? (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 block text-sm font-medium break-words text-neutral-950 underline decoration-neutral-400 underline-offset-4 hover:text-black"
+        >
+          {value}
+        </a>
+      ) : (
+        <p className="mt-1 text-sm text-neutral-500">{emptyText}</p>
+      )}
     </div>
   );
 }
@@ -101,7 +126,7 @@ function ColorItem({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-white p-3">
       <div>
         <p className="text-xs font-semibold text-neutral-500">{label}</p>
-        <p className="mt-1 text-sm uppercase text-neutral-950">{value}</p>
+        <p className="mt-1 text-sm text-neutral-950 uppercase">{value}</p>
       </div>
 
       <div

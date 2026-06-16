@@ -17,6 +17,8 @@ import DetalleBarberiaModal from "@/componentes/super-admin/DetalleBarberiaModal
 import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
 import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
+const TENANTS_POR_PAGINA = 5;
+
 export default function SuperAdminPage() {
   return (
     <GuardiaAuth rolesPermitidos={["SUPER_ADMIN"]}>
@@ -25,12 +27,29 @@ export default function SuperAdminPage() {
   );
 }
 
+function formatearUbicacion(address?: string | null) {
+  if (!address) return "Sin ubicación";
+
+  const addressLimpia = address.trim();
+
+  if (
+    addressLimpia.startsWith("https://www.google.com/maps/embed") ||
+    addressLimpia.startsWith("https://maps.google.com/maps")
+  ) {
+    return "Mapa configurado";
+  }
+
+  return addressLimpia;
+}
+
 function SuperAdminPanel() {
   const [tenants, setTenants] = useState<SuperAdminTenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [reenviandoId, setReenviandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [paginaActual, setPaginaActual] = useState(1);
 
   const [modalCrearOpen, setModalCrearOpen] = useState(false);
   const [tenantEditando, setTenantEditando] = useState<SuperAdminTenant | null>(null);
@@ -71,12 +90,26 @@ function SuperAdminPanel() {
     [tenants],
   );
 
+  const totalPaginas = useMemo(() => {
+    return Math.max(1, Math.ceil(tenants.length / TENANTS_POR_PAGINA));
+  }, [tenants.length]);
+
+  const tenantsPaginados = useMemo(() => {
+    const inicio = (paginaActual - 1) * TENANTS_POR_PAGINA;
+    const fin = paginaActual * TENANTS_POR_PAGINA;
+
+    return tenants.slice(inicio, fin);
+  }, [tenants, paginaActual]);
+
   async function cargarTenants() {
     try {
       setLoading(true);
       setError(null);
+
       const data = await listarTenantsSuperAdmin();
+
       setTenants(data);
+      setPaginaActual(1);
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.message ?? "No se pudieron cargar las barberías.");
@@ -199,6 +232,14 @@ function SuperAdminPanel() {
     }
   }
 
+  function irPaginaAnterior() {
+    setPaginaActual((prev) => Math.max(1, prev - 1));
+  }
+
+  function irPaginaSiguiente() {
+    setPaginaActual((prev) => Math.min(totalPaginas, prev + 1));
+  }
+
   useEffect(() => {
     void cargarTenants();
   }, []);
@@ -237,7 +278,7 @@ function SuperAdminPanel() {
           <ResumenCard titulo="Inactivas" valor={totalInactivos} />
         </section>
 
-        <section className="rounded-3xl border border-neutral-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-neutral-200 p-6 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-neutral-950">Barberías registradas</h2>
@@ -269,9 +310,9 @@ function SuperAdminPanel() {
             </div>
           ) : (
             <>
-              {/* Vista móvil: cards */}
+              {/* Vista móvil */}
               <div className="grid gap-4 p-4 md:hidden">
-                {tenants.map((tenant) => {
+                {tenantsPaginados.map((tenant) => {
                   const admin = tenant.users[0];
                   const accionLoading = actionLoadingId === tenant.id;
                   const reenviando = reenviandoId === tenant.id;
@@ -280,15 +321,16 @@ function SuperAdminPanel() {
                     <article
                       key={tenant.id}
                       onClick={() => setTenantDetalle(tenant)}
-                      className="cursor-pointer rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:bg-neutral-50"
+                      className="cursor-pointer rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:bg-neutral-50"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <h3 className="truncate text-base font-semibold text-neutral-950">
+                          <h3 className="truncate text-lg font-semibold text-neutral-950">
                             {tenant.name}
                           </h3>
-
-                          <p className="mt-1 text-xs break-all text-neutral-500">{tenant.domain}</p>
+                          <p className="mt-1 truncate text-sm text-neutral-500">
+                            {tenant.email ?? "Sin correo de contacto"}
+                          </p>
                         </div>
 
                         <span
@@ -304,11 +346,19 @@ function SuperAdminPanel() {
 
                       <div className="mt-4 space-y-3 text-sm">
                         <div>
-                          <p className="text-xs font-semibold text-neutral-500">Admin</p>
-                          <p className="mt-1 break-all text-neutral-800">
+                          <p className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+                            Dominio
+                          </p>
+                          <p className="mt-1 truncate text-neutral-700">{tenant.domain}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+                            Admin
+                          </p>
+                          <p className="mt-1 truncate text-neutral-800">
                             {admin?.email ?? "Sin admin"}
                           </p>
-
                           {admin ? (
                             <p className="mt-1 text-xs text-neutral-500">
                               {admin.isActive ? "Cuenta activa" : "Pendiente de activar"}
@@ -317,21 +367,16 @@ function SuperAdminPanel() {
                         </div>
 
                         <div>
-                          <p className="text-xs font-semibold text-neutral-500">Correo contacto</p>
-                          <p className="mt-1 break-all text-neutral-800">
-                            {tenant.email ?? "Sin correo de contacto"}
+                          <p className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+                            Ubicación
                           </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-semibold text-neutral-500">Ubicación</p>
-                          <p className="mt-1 text-neutral-800">
-                            {tenant.address ?? "Sin dirección"}
+                          <p className="mt-1 truncate text-neutral-700">
+                            {formatearUbicacion(tenant.address)}
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-5 flex flex-col gap-2">
+                      <div className="mt-5 flex flex-wrap gap-2">
                         {admin && !admin.isActive ? (
                           <button
                             type="button"
@@ -396,22 +441,22 @@ function SuperAdminPanel() {
                 })}
               </div>
 
-              {/* Vista desktop/tablet: tabla */}
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              {/* Vista desktop */}
+              <div className="hidden md:block">
+                <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead className="bg-neutral-50 text-xs tracking-wide text-neutral-500 uppercase">
                     <tr>
-                      <th className="px-6 py-4 font-semibold">Barbería</th>
-                      <th className="px-6 py-4 font-semibold">Dominio</th>
-                      <th className="px-6 py-4 font-semibold">Admin</th>
-                      <th className="px-6 py-4 font-semibold">Ubicación</th>
-                      <th className="px-6 py-4 font-semibold">Estado</th>
-                      <th className="px-6 py-4 text-right font-semibold">Acciones</th>
+                      <th className="w-[19%] px-5 py-4 font-semibold">Barbería</th>
+                      <th className="w-[16%] px-5 py-4 font-semibold">Dominio</th>
+                      <th className="w-[20%] px-5 py-4 font-semibold">Admin</th>
+                      <th className="w-[17%] px-5 py-4 font-semibold">Ubicación</th>
+                      <th className="w-[10%] px-5 py-4 font-semibold">Estado</th>
+                      <th className="w-[18%] px-5 py-4 text-right font-semibold">Acciones</th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-neutral-200">
-                    {tenants.map((tenant) => {
+                    {tenantsPaginados.map((tenant) => {
                       const admin = tenant.users[0];
                       const accionLoading = actionLoadingId === tenant.id;
                       const reenviando = reenviandoId === tenant.id;
@@ -422,36 +467,42 @@ function SuperAdminPanel() {
                           onClick={() => setTenantDetalle(tenant)}
                           className="cursor-pointer hover:bg-neutral-50/70"
                         >
-                          <td className="px-6 py-4">
-                            <div className="font-semibold text-neutral-950">{tenant.name}</div>
-                            <div className="mt-1 text-xs text-neutral-500">
+                          <td className="px-5 py-4">
+                            <div className="truncate font-semibold text-neutral-950">
+                              {tenant.name}
+                            </div>
+                            <div className="mt-1 truncate text-xs text-neutral-500">
                               {tenant.email ?? "Sin correo de contacto"}
                             </div>
                           </td>
 
-                          <td className="px-6 py-4">
-                            <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                          <td className="px-5 py-4">
+                            <span className="block truncate rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
                               {tenant.domain}
                             </span>
                           </td>
 
-                          <td className="px-6 py-4">
-                            <div className="text-neutral-800">{admin?.email ?? "Sin admin"}</div>
+                          <td className="px-5 py-4">
+                            <div className="truncate text-neutral-800">
+                              {admin?.email ?? "Sin admin"}
+                            </div>
 
                             {admin ? (
-                              <div className="mt-1 text-xs text-neutral-500">
+                              <div className="mt-1 truncate text-xs text-neutral-500">
                                 {admin.isActive ? "Cuenta activa" : "Pendiente de activar"}
                               </div>
                             ) : null}
                           </td>
 
-                          <td className="px-6 py-4 text-neutral-600">
-                            {tenant.address ?? "Sin dirección"}
+                          <td className="px-5 py-4 text-neutral-600">
+                            <span className="block truncate">
+                              {formatearUbicacion(tenant.address)}
+                            </span>
                           </td>
 
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-4">
                             <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                                 tenant.isActive
                                   ? "bg-green-50 text-green-700 ring-1 ring-green-200"
                                   : "bg-red-50 text-red-700 ring-1 ring-red-200"
@@ -461,8 +512,8 @@ function SuperAdminPanel() {
                             </span>
                           </td>
 
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex justify-end gap-2">
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex flex-wrap justify-end gap-2">
                               {admin && !admin.isActive ? (
                                 <button
                                   type="button"
@@ -479,9 +530,9 @@ function SuperAdminPanel() {
                                       onConfirm: () => void reenviarActivacion(tenant),
                                     });
                                   }}
-                                  className="rounded-full border border-yellow-300 bg-yellow-50 px-4 py-2 text-xs font-semibold text-yellow-800 transition hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="rounded-full border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800 transition hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  {reenviando ? "Reenviando..." : "Reenviar activación"}
+                                  {reenviando ? "Reenviando..." : "Reenviar"}
                                 </button>
                               ) : null}
 
@@ -491,7 +542,7 @@ function SuperAdminPanel() {
                                   e.stopPropagation();
                                   setTenantEditando(tenant);
                                 }}
-                                className="rounded-full border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100"
+                                className="rounded-full border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100"
                               >
                                 Editar
                               </button>
@@ -515,13 +566,9 @@ function SuperAdminPanel() {
                                     onConfirm: () => void cambiarEstadoTenant(tenant),
                                   });
                                 }}
-                                className="rounded-full border border-neutral-300 px-4 py-2 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-full border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {accionLoading
-                                  ? "Procesando..."
-                                  : tenant.isActive
-                                    ? "Desactivar"
-                                    : "Activar"}
+                                {accionLoading ? "..." : tenant.isActive ? "Desactivar" : "Activar"}
                               </button>
                             </div>
                           </td>
@@ -531,6 +578,34 @@ function SuperAdminPanel() {
                   </tbody>
                 </table>
               </div>
+
+              {tenants.length > TENANTS_POR_PAGINA ? (
+                <div className="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 px-6 py-4 sm:flex-row">
+                  <p className="text-sm text-neutral-500">
+                    Página {paginaActual} de {totalPaginas}
+                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={paginaActual === 1}
+                      onClick={irPaginaAnterior}
+                      className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Anterior
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={paginaActual === totalPaginas}
+                      onClick={irPaginaSiguiente}
+                      className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </section>

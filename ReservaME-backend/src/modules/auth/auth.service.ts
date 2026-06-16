@@ -29,6 +29,40 @@ export class AuthService {
     private readonly mail: MailService,
   ) {}
 
+  private construirUrlFrontendTenant(
+    tenantDomain: string | null | undefined,
+    path: string,
+  ) {
+    const domain = tenantDomain?.trim();
+
+    if (!domain) {
+      const frontendUrl = (
+        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
+      ).replace(/\/$/, '');
+
+      return `${frontendUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
+    let domainLimpio = domain.replace(/\/$/, '');
+
+    const tieneProtocolo =
+      domainLimpio.startsWith('http://') || domainLimpio.startsWith('https://');
+
+    const esLocalhost = domainLimpio.includes('localhost');
+
+    const tienePuerto = /:\d+$/.test(domainLimpio);
+
+    if (esLocalhost && !tienePuerto) {
+      domainLimpio = `${domainLimpio}:3001`;
+    }
+
+    const baseUrl = tieneProtocolo
+      ? domainLimpio
+      : `${esLocalhost ? 'http' : 'https'}://${domainLimpio}`;
+
+    return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
   async login(
     tenantId: string | undefined,
     dto: LoginDto,
@@ -94,7 +128,10 @@ export class AuthService {
         id: tenantId,
         isActive: true,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        domain: true,
+      },
     });
 
     if (!tenant) {
@@ -182,11 +219,10 @@ export class AuthService {
       return { user };
     });
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
-    const link = `${frontendUrl}/activate/${encodeURIComponent(tokenPlano)}`;
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/activate/${encodeURIComponent(tokenPlano)}`,
+    );
 
     await this.mail.enviarActivacionCuenta({
       to: resultado.user.email,
@@ -202,6 +238,20 @@ export class AuthService {
   }
 
   async reenviarActivacion(tenantId: string, emailRaw: string) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        domain: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
     const email = emailRaw.trim().toLowerCase();
 
     const user = await this.prisma.user.findFirst({
@@ -252,11 +302,10 @@ export class AuthService {
       }),
     ]);
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
-    const link = `${frontendUrl}/activate/${encodeURIComponent(tokenPlano)}`;
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/activate/${encodeURIComponent(tokenPlano)}`,
+    );
     const nombreParaCorreo = user.barber?.name || 'Usuario';
 
     await this.mail.enviarActivacionCuenta({
@@ -323,6 +372,21 @@ export class AuthService {
   ) {
     const email = dto.email.trim().toLowerCase();
 
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        domain: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         email,
@@ -365,11 +429,10 @@ export class AuthService {
       },
     });
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-
-    const link = `${frontendUrl}/login/reset-password/${encodeURIComponent(tokenPlano)}`;
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/login/reset-password/${encodeURIComponent(tokenPlano)}`,
+    );
 
     const nombreParaCorreo = user.barber?.name || 'Administrador';
 

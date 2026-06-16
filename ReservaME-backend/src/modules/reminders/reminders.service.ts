@@ -17,8 +17,6 @@ export class RemindersService {
   ) {}
 
   private async getReminderHours(tenantId: string): Promise<number> {
-    // Se asegura que exista una fila de settings por tenant con valores por defecto.
-    // No debe pisar el valor configurado por admin.
     const s = await this.prisma.appSetting.upsert({
       where: { tenantId },
       update: {},
@@ -44,12 +42,12 @@ export class RemindersService {
     const ttlMin = Number(
       this.config.get('RESERVATION_MANAGEMENT_TOKEN_TTL_MINUTES') ?? 1440,
     );
+
     const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000);
 
     const tokenPlano = generarTokenSeguro(32);
     const tokenHash = hashToken(tokenPlano);
 
-    // Se invalidan tokens anteriores no usados para esa reserva dentro del tenant.
     await tx.token.updateMany({
       where: {
         tenantId,
@@ -71,6 +69,7 @@ export class RemindersService {
     });
 
     const linkGestion = `${this.getFrontendUrl()}/reserva/gestionar/${tokenPlano}`;
+
     return { linkGestion, expiresAt };
   }
 
@@ -92,7 +91,6 @@ export class RemindersService {
     const now = new Date();
     const target = new Date(now.getTime() + hours * 60 * 60 * 1000);
 
-    // Ventana de 20 min para no depender del minuto exacto.
     const windowStart = new Date(target.getTime() - 10 * 60 * 1000);
     const windowEnd = new Date(target.getTime() + 10 * 60 * 1000);
 
@@ -127,44 +125,64 @@ export class RemindersService {
 
     for (const r of reservas) {
       try {
-        // Se hace transacción por reserva para evitar duplicados si corre en paralelo.
-        await this.prisma.$transaction(async (tx) => {
-          // Se vuelve a verificar que siga pendiente y pertenezca al tenant.
-          const fresh = await tx.reservation.findFirst({
-            where: { id: r.id, tenantId },
-            select: { reminderSentAt: true, status: true },
-          });
+        const dataCorreo = await this.prisma.$transaction(
+          async (tx) => {
+            const fresh = await tx.reservation.findFirst({
+              where: { id: r.id, tenantId },
+              select: {
+                id: true,
+                reminderSentAt: true,
+                status: true,
+              },
+            });
 
-          if (!fresh || fresh.status !== 'CONFIRMADA' || fresh.reminderSentAt) {
-            return;
-          }
+            if (!fresh || fresh.status !== 'CONFIRMADA' || fresh.reminderSentAt) {
+              return null;
+            }
 
-          const { linkGestion } = await this.generarLinkGestion(
-            tx,
-            tenantId,
-            r.id,
-          );
+            const { linkGestion } = await this.generarLinkGestion(
+              tx,
+              tenantId,
+              r.id,
+            );
 
-          await this.mail.enviarRecordatorioReservaConGestion({
-            to: r.clientEmail,
-            nombre: r.clientName,
-            hoursBefore: hours,
-            resumen: {
-              barberName: r.barber?.name ?? '—',
-              serviceName: r.service?.name ?? '—',
-              startAt: r.startAt,
-              endAt: r.endAt,
-              priceFinal: r.priceFinal.toString(),
-              durationFinalMin: r.durationFinalMin,
-              comment: r.comment ?? null,
-            },
-            linkGestion,
-          });
+            return {
+              reservationId: r.id,
+              to: r.clientEmail,
+              nombre: r.clientName,
+              tenantId: r.tenantId,
+              hoursBefore: hours,
+              resumen: {
+                barberName: r.barber?.name ?? '—',
+                serviceName: r.service?.name ?? '—',
+                startAt: r.startAt,
+                endAt: r.endAt,
+                priceFinal: r.priceFinal.toString(),
+                durationFinalMin: r.durationFinalMin,
+                comment: r.comment ?? null,
+              },
+              linkGestion,
+            };
+          },
+          {
+            timeout: 10000,
+          },
+        );
 
-          await tx.reservation.update({
-            where: { id: r.id },
-            data: { reminderSentAt: new Date() },
-          });
+        if (!dataCorreo) continue;
+
+        await this.mail.enviarRecordatorioReservaConGestion({
+          to: dataCorreo.to,
+          nombre: dataCorreo.nombre,
+          tenantId: dataCorreo.tenantId,
+          hoursBefore: dataCorreo.hoursBefore,
+          resumen: dataCorreo.resumen,
+          linkGestion: dataCorreo.linkGestion,
+        });
+
+        await this.prisma.reservation.update({
+          where: { id: dataCorreo.reservationId },
+          data: { reminderSentAt: new Date() },
         });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);

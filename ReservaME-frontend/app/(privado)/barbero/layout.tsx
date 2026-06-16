@@ -1,29 +1,39 @@
-"use client";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import BarberoLayoutClient from "../BarberoLayoutClient";
+import { obtenerTenantPublico } from "@/services/tenant-publico.service";
 
-import { useSession } from "@/context/SesionProvider";
-import BarberoTopbar from "@/componentes/barbero/BarberoTopbar"; 
-import BarberoSidebar from "@/componentes/barbero/BarberoSidebar"; 
-import GuardiaAuth from "@/componentes/auth/GuardAuth"; 
-import Footer from "@/componentes/layout/Footer"; 
+async function obtenerTenantSeguro() {
+  try {
+    const requestHeaders = await headers();
+    const tenantHost = requestHeaders.get("host");
 
-export default function BarberoLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useSession();
+    return await obtenerTenantPublico(tenantHost);
+  } catch {
+    return null;
+  }
+}
 
-  return (
-    <GuardiaAuth rolesPermitidos={["BARBERO"]}>
-      <div className="flex min-h-screen flex-col bg-neutral-50">    
-        <BarberoTopbar email={user?.email ?? ""} />
-        <div className="mx-auto flex w-full max-w-7xl flex-1">
-          
-          <BarberoSidebar />
-          
-          <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
-            {children}
-          </main>
-        </div>
-        <Footer />
-    
-      </div>
-    </GuardiaAuth>
-  );
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await obtenerTenantSeguro();
+
+  const tenantName = tenant?.name ?? "ReservaME";
+  const logoUrl = tenant?.settings?.logoUrl || "/favicon.ico";
+
+  return {
+    title: `Panel Barbero | ${tenantName}`,
+    icons: {
+      icon: logoUrl,
+      shortcut: logoUrl,
+      apple: logoUrl,
+    },
+  };
+}
+
+export default async function BarberoLayout({ children }: { children: React.ReactNode }) {
+  const tenant = await obtenerTenantSeguro();
+
+  const tenantName = tenant?.name ?? "ReservaME";
+
+  return <BarberoLayoutClient tenantName={tenantName}>{children}</BarberoLayoutClient>;
 }

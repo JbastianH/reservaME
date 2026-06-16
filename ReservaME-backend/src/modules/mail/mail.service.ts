@@ -2,16 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import {
-  POLITICA_CANCELACION_TEXTO,
+  construirPoliticaCancelacionTexto,
+  POLITICA_CANCELACION_HORAS_DEFAULT,
   POLITICA_CANCELACION_TITULO,
 } from 'src/common/constants/politica-cancelacion';
+import { PrismaService } from 'src/config/prisma.service';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly resend: Resend;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const apiKey = this.config.getOrThrow<string>('RESEND_API_KEY');
     this.resend = new Resend(apiKey);
   }
@@ -24,6 +29,34 @@ export class MailService {
     }).format(date);
   }
 
+  private async obtenerHorasPoliticaCancelacion(tenantId?: string | null) {
+    if (!tenantId) {
+      return POLITICA_CANCELACION_HORAS_DEFAULT;
+    }
+
+    const settings = await this.prisma.appSetting.findUnique({
+      where: {
+        tenantId,
+      },
+      select: {
+        cancellationHoursBefore: true,
+      },
+    });
+
+    return (
+      settings?.cancellationHoursBefore ?? POLITICA_CANCELACION_HORAS_DEFAULT
+    );
+  }
+
+  private construirPoliticaCancelacionHtml(horas: number) {
+    return `
+    <p style="margin: 10px 0 0; font-size: 12px; color:#6b7280;">
+      <strong>${this.escapeHtml(POLITICA_CANCELACION_TITULO)}:</strong>
+      ${this.escapeHtml(construirPoliticaCancelacionTexto(horas))}
+    </p>
+  `;
+  }
+
   async enviarActivacionCuenta(params: {
     to: string;
     link: string;
@@ -32,7 +65,7 @@ export class MailService {
     const subject = 'Activa tu cuenta - ReservaME';
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">
@@ -117,7 +150,7 @@ export class MailService {
   async enviarResena(params: { to: string; link: string; nombre: string }) {
     const subject = 'Tu opinión nos ayuda - ReservaME';
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
 
     const html = `
@@ -202,6 +235,7 @@ export class MailService {
   async enviarResumenReservaConGestion(params: {
     to: string;
     nombre: string;
+    tenantId?: string | null;
     resumen: {
       barberName: string;
       serviceName: string;
@@ -224,15 +258,16 @@ export class MailService {
         : null;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
 
-    const politicaHtml = `
-    <p style="margin: 10px 0 0; font-size: 12px; color:#6b7280;">
-      <strong>${this.escapeHtml(POLITICA_CANCELACION_TITULO)}:</strong>
-      ${this.escapeHtml(POLITICA_CANCELACION_TEXTO)}
-    </p>
-  `;
+    const cancellationHoursBefore = await this.obtenerHorasPoliticaCancelacion(
+      params.tenantId,
+    );
+
+    const politicaHtml = this.construirPoliticaCancelacionHtml(
+      cancellationHoursBefore,
+    );
 
     const html = `
   <div style="margin:0;padding:0;background:#f3f4f6;">
@@ -336,6 +371,7 @@ export class MailService {
   async enviarReservaReprogramadaConGestion(params: {
     to: string;
     nombre: string;
+    tenantId?: string | null;
     resumen: {
       barberName: string;
       serviceName: string;
@@ -358,14 +394,16 @@ export class MailService {
         : null;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
 
-    const politicaHtml = `
-  <p style="margin: 8px 0 16px; font-size: 12px; color:#666;">
-    <strong>${this.escapeHtml(POLITICA_CANCELACION_TITULO)}:</strong> ${this.escapeHtml(POLITICA_CANCELACION_TEXTO)}
-  </p>
-`;
+    const cancellationHoursBefore = await this.obtenerHorasPoliticaCancelacion(
+      params.tenantId,
+    );
+
+    const politicaHtml = this.construirPoliticaCancelacionHtml(
+      cancellationHoursBefore,
+    );
     const html = `
     <div style="margin:0;padding:0;background:#f3f4f6;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px;">
@@ -469,6 +507,7 @@ export class MailService {
   async enviarRecordatorioReservaConGestion(params: {
     to: string;
     nombre: string;
+    tenantId?: string | null;
     hoursBefore: number; // ej: 24
     resumen: {
       barberName: string;
@@ -497,14 +536,16 @@ export class MailService {
         : `en aproximadamente ${params.hoursBefore} horas`;
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
 
-    const politicaHtml = `
-  <p style="margin: 8px 0 16px; font-size: 12px; color:#666;">
-    <strong>${this.escapeHtml(POLITICA_CANCELACION_TITULO)}:</strong> ${this.escapeHtml(POLITICA_CANCELACION_TEXTO)}
-  </p>
-`;
+    const cancellationHoursBefore = await this.obtenerHorasPoliticaCancelacion(
+      params.tenantId,
+    );
+
+    const politicaHtml = this.construirPoliticaCancelacionHtml(
+      cancellationHoursBefore,
+    );
 
     const html = `
     <div style="margin:0;padding:0;background:#f3f4f6;">
@@ -614,7 +655,7 @@ export class MailService {
     const subject = 'Restablecer contraseña - ReservaME';
 
     const LOGO_URL =
-      'https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png';
+      'https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png';
     const NOMBRE_MARCA = 'ReservaME';
     const html = `
       <div style="margin:0;padding:0;background:#f3f4f6;">

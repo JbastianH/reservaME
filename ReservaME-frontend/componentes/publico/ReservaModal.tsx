@@ -22,6 +22,7 @@ type Props = {
   barberServiceId: string;
   serviceName: string;
   durationMin: number;
+  cancellationHoursBefore?: number;
   mode?: Mode;
   reservaId?: string;
   actor?: ReprogramarActor;
@@ -61,6 +62,7 @@ function normalizePhoneCL(v: string) {
 
 export default function ReservaModal(props: Props) {
   const router = useRouter();
+  const cancellationHoursBefore = props.cancellationHoursBefore ?? 3;
 
   const mode: Mode = props.mode ?? "CREAR";
   const actor: ReprogramarActor = props.actor ?? "BARBERO";
@@ -424,6 +426,7 @@ export default function ReservaModal(props: Props) {
                     <PoliticaCancelacion
                       aceptado={politicaAceptada}
                       setAceptado={setPoliticaAceptada}
+                      cancellationHoursBefore={cancellationHoursBefore}
                     />
                   </div>
                 </>

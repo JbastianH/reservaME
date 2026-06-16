@@ -2,51 +2,66 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
 
-export default function Header() {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+type HeaderProps = {
+  tenantName?: string;
+  logoUrl?: string | null;
+  headerColor?: string;
+  instagramUrl?: string | null;
+};
 
-  const links = useMemo(
-    () => [
-      { href: "/", label: "Inicio" },
-      { href: "/login", label: "Iniciar sesión" },
-    ],
-    [],
-  );
+function getReadableTextColor(backgroundColor: string) {
+  const hex = backgroundColor.replace("#", "");
 
-  function isActive(href: string) {
-    return href === "/" ? pathname === "/" : pathname?.startsWith(href);
-  }
+  if (hex.length !== 6) return "#ffffff";
+
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 160 ? "#111111" : "#ffffff";
+}
+
+export default function Header({
+  tenantName = "ReservaME",
+  logoUrl,
+  headerColor = "#ffffff",
+  instagramUrl,
+}: HeaderProps) {
+  const textColor = getReadableTextColor(headerColor);
+
+  const logoSrc =
+    logoUrl ||
+    "https://res.cloudinary.com/dllykgnb0/image/upload/v1780457196/Logo_ReservaME_sin_fondo_oltrvn.png";
 
   return (
-    <header className="w-full border-b border-neutral-200 bg-white text-black">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        
-        {/* Renderiza el enlace con el logo de la marca alineado a la izquierda. */}
+    <header
+      className="w-full border-b border-white/10"
+      style={{ backgroundColor: headerColor, color: textColor }}
+    >
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3">
-          <Image
-            src="https://res.cloudinary.com/dllykgnb0/image/upload/v1779398497/Logo_ReservaME_eirqzh.png"
-            alt="ReservaME Logo"
-            width={200}
-            height={200}
-            className="object-contain"
-            priority
-          />
+          <div className="flex h-16 w-48 items-center justify-start sm:h-[72px] sm:w-64">
+  <Image
+    src={logoSrc}
+    alt={`${tenantName} Logo`}
+    width={260}
+    height={100}
+    className="max-h-full w-auto max-w-full object-contain"
+    priority
+  />
+</div>
         </Link>
 
-        {/* Agrupa los elementos del lado derecho del header. */}
-        <div className="flex items-center gap-4">
-          
-          {/* Renderiza el botón de Instagram con el fondo degradado y la sombra brillante visibles de forma permanente. */}
+        {instagramUrl ? (
           <Link
-            href="https://instagram.com/studiobarber_bw"
+            href={instagramUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex h-10 w-10 items-center justify-center rounded-full text-white bg-gradient-to-r from-blue-600 via-violet-600 to-fuchsia-600 shadow-[0_0_10px_rgba(139,92,246,0.4)] transition-all duration-300 hover:shadow-[0_0_15px_rgba(217,70,239,0.6)] active:scale-95 active:shadow-[0_0_20px_rgba(217,70,239,0.8)]"
-            aria-label="Ir al Instagram de Black & White Studio"
+            className="group flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 via-violet-600 to-fuchsia-600 text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] transition-all duration-300 hover:shadow-[0_0_15px_rgba(217,70,239,0.6)] active:scale-95 active:shadow-[0_0_20px_rgba(217,70,239,0.8)]"
+            aria-label={`Ir al Instagram de ${tenantName}`}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -60,13 +75,12 @@ export default function Header() {
               strokeLinejoin="round"
               className="transition-transform duration-300 group-hover:scale-110"
             >
-              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
             </svg>
           </Link>
-        </div>
-
+        ) : null}
       </div>
     </header>
   );
