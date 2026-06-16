@@ -20,6 +20,7 @@ model Tenant {
   appSetting      AppSetting?
   barberServices  BarberService[]
   weeklySchedules BarberWeeklySchedule[]
+  barberTimeBlocks BarberTimeBlock[]
   barbers         Barber[]
   portfolioImages PortfolioImage[]
   productos       Producto[]
@@ -81,6 +82,7 @@ model Barber {
   updatedAt       DateTime               @updatedAt @map("updated_at")
   services        BarberService[]
   weeklySchedule  BarberWeeklySchedule[]
+  timeBlocks      BarberTimeBlock[]
   tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user            User?                  @relation(fields: [userId], references: [id])
   portfolioImages PortfolioImage[]
@@ -251,6 +253,30 @@ model BarberWeeklySchedule {
   @@index([tenantId])
   @@index([barberId])
   @@map("barber_weekly_schedule")
+}
+
+model BarberTimeBlock {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  barberId  String   @map("barber_id")
+
+  startAt   DateTime @map("start_at")
+  endAt     DateTime @map("end_at")
+
+  reason    String?
+  isActive  Boolean  @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  barber    Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, barberId, startAt])
+  @@index([tenantId])
+  @@index([barberId])
+  @@index([tenantId, barberId, startAt, endAt])
+  @@map("barber_time_blocks")
 }
 
 model Producto {
