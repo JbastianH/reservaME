@@ -20,7 +20,7 @@ export class TenantMiddleware implements NestMiddleware {
     const hostNormalizado = this.normalizarHost(host);
 
     // Dominio global de ReservaME (NO tenant)
-    if (hostNormalizado === 'admin.localhost') {
+    if (hostNormalizado === 'admin.localhost' || hostNormalizado === 'reservame.cl') {
       next();
       return;
     }
