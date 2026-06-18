@@ -112,6 +112,22 @@ export class ReservasPublicasService {
         );
       }
 
+      const bloqueada = await tx.barberTimeBlock.findFirst({
+        where: {
+          tenantId,
+          barberId: barber.id,
+          isActive: true,
+          AND: [{ startAt: { lt: endAt } }, { endAt: { gt: startAt } }],
+        },
+        select: { id: true },
+      });
+
+      if (bloqueada) {
+        throw new BadRequestException(
+          'El horario seleccionado no está disponible. Por favor, elige otro horario.',
+        );
+      }
+
       const reserva = await tx.reservation.create({
         data: {
           tenantId,
@@ -373,6 +389,22 @@ export class ReservasPublicasService {
       });
 
       if (conflicto) {
+        throw new BadRequestException(
+          'El horario seleccionado ya no está disponible.',
+        );
+      }
+
+      const bloqueo = await tx.barberTimeBlock.findFirst({
+        where: {
+          tenantId: reserva.tenantId,
+          barberId: reserva.barberId,
+          isActive: true,
+          AND: [{ startAt: { lt: nuevaFin } }, { endAt: { gt: nuevoInicio } }],
+        },
+        select: { id: true },
+      });
+
+      if (bloqueo) {
         throw new BadRequestException(
           'El horario seleccionado ya no está disponible.',
         );

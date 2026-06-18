@@ -6,9 +6,11 @@ import { useMiPortafolio } from "@/lib/useMiPortafolio";
 import { subirImagenCloudinary } from "@/lib/cloudinaryUpload";
 import {
   crearFotoPortafolio,
-  eliminarFotoPortafolio,
   setVisibleFotoPortafolio,
 } from "@/services/barbero-portafolio.service";
+
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 function safeImageSrc(src?: string | null) {
   const s = (src ?? "").trim();
@@ -18,21 +20,49 @@ function safeImageSrc(src?: string | null) {
   return null;
 }
 
+type ToggleFotoTarget = {
+  id: string;
+  visible: boolean;
+};
+
 export default function PortafolioPanel() {
   const { data, loading, error, refetch } = useMiPortafolio();
   const items = data ?? [];
 
   const [busy, setBusy] = useState(false);
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  const [toggleFotoTarget, setToggleFotoTarget] = useState<ToggleFotoTarget | null>(null);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
+
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
   async function onUpload(file: File) {
-    resetBanners();
+    if (file.size > 10 * 1024 * 1024) {
+      mostrarFeedback({
+        title: "Imagen muy pesada",
+        message: "La imagen supera el peso máximo permitido de 10MB.",
+        variant: "error",
+      });
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -44,38 +74,65 @@ export default function PortafolioPanel() {
 
       await crearFotoPortafolio({ imageUrl: upload.secureUrl });
 
-      setBannerOk("Foto subida al portafolio ✔︎");
+      mostrarFeedback({
+        title: "Foto subida",
+        message: "La foto fue agregada correctamente a tu portafolio.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo subir la foto.");
+      mostrarFeedback({
+        title: "No se pudo subir la foto",
+        message: e?.message ? String(e.message) : "No se pudo subir la foto.",
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
   }
 
-  async function toggleVisible(id: string, current: boolean) {
-    resetBanners();
-    setBusy(true);
-    try {
-      await setVisibleFotoPortafolio(id, !current);
-      setBannerOk(!current ? "Foto visible ✔︎" : "Foto oculta ✔︎");
-      await refetch();
-    } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo actualizar visibilidad.");
-    } finally {
-      setBusy(false);
-    }
+  function abrirToggleVisible(id: string, visible: boolean) {
+    setToggleFotoTarget({
+      id,
+      visible,
+    });
   }
 
-  async function eliminar(id: string) {
-    resetBanners();
+  function cerrarToggleVisible() {
+    if (busy) return;
+    setToggleFotoTarget(null);
+  }
+
+  async function confirmarToggleVisible() {
+    if (!toggleFotoTarget) return;
+
+    const nextVisible = !toggleFotoTarget.visible;
+
     setBusy(true);
+
     try {
-      await eliminarFotoPortafolio(id);
-      setBannerOk("Foto eliminada (borrado lógico) ✔︎");
+      await setVisibleFotoPortafolio(toggleFotoTarget.id, nextVisible);
+
+      setToggleFotoTarget(null);
+
+      mostrarFeedback({
+        title: nextVisible ? "Foto visible" : "Foto oculta",
+        message: nextVisible
+          ? "La foto ahora será visible en tu perfil público."
+          : "La foto fue ocultada de tu perfil público.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo eliminar.");
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: e?.message
+          ? String(e.message)
+          : "No se pudo actualizar la visibilidad de la foto.",
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -109,18 +166,6 @@ export default function PortafolioPanel() {
           </label>
         </div>
       </div>
-
-      {bannerOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
-        </div>
-      ) : null}
-
-      {bannerError ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
-        </div>
-      ) : null}
 
       {loading ? (
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
@@ -175,11 +220,16 @@ export default function PortafolioPanel() {
                     <div className="flex gap-2 p-3">
                       <button
                         disabled={busy || x.hiddenByAdmin}
-                        onClick={() => void toggleVisible(x.id, x.visible)}
-                        className="flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
+                        onClick={() => abrirToggleVisible(x.id, x.visible)}
+                        className={[
+                          "flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+                          x.visible
+                            ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                            : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                        ].join(" ")}
                         title={x.hiddenByAdmin ? "El admin ocultó esta foto" : ""}
                       >
-                        {x.visible ? "Ocultar" : "Mostrar"}
+                        {busy ? "Guardando..." : x.visible ? "Ocultar" : "Mostrar"}
                       </button>
                     </div>
                   </div>
@@ -188,6 +238,38 @@ export default function PortafolioPanel() {
           </div>
         )
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(toggleFotoTarget)}
+        title={toggleFotoTarget?.visible ? "Ocultar foto" : "Mostrar foto"}
+        message={
+          toggleFotoTarget
+            ? toggleFotoTarget.visible
+              ? "¿Seguro que quieres ocultar esta foto? No aparecerá en tu perfil público."
+              : "¿Seguro que quieres mostrar esta foto? Volverá a aparecer en tu perfil público."
+            : ""
+        }
+        confirmText={
+          busy ? "Guardando..." : toggleFotoTarget?.visible ? "Sí, ocultar" : "Sí, mostrar"
+        }
+        cancelText="Volver"
+        variant={toggleFotoTarget?.visible ? "danger" : "default"}
+        onConfirm={() => void confirmarToggleVisible()}
+        onClose={cerrarToggleVisible}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

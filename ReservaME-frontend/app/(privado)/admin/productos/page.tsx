@@ -9,6 +9,8 @@ import {
   listarProductosAdmin,
 } from "@/services/productos.service";
 import Image from "next/image";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 // Se importa la utilidad de Cloudinary para la carga de archivos
 import { subirImagenCloudinary } from "@/lib/cloudinaryUpload";
@@ -31,7 +33,10 @@ type FormState = {
   stock: number | "";
   imagenUrl: string;
 };
-
+type DeleteProductoTarget = {
+  id: string;
+  nombre: string;
+};
 export default function AdminProductosPage() {
   const [productos, setProductos] = useState<ProductoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,13 +63,16 @@ export default function AdminProductosPage() {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [confirm, setConfirm] = useState<{
-    open: boolean;
-    id: string | null;
-  }>({ open: false, id: null });
+  const [loadError, setLoadError] = useState("");
 
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<DeleteProductoTarget | null>(null);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   function mapearError(err: unknown): string {
     const e = err as Partial<ApiError> | undefined;
@@ -75,8 +83,11 @@ export default function AdminProductosPage() {
 
   async function refetchProductos() {
     setLoading(true);
+    setLoadError("");
+
     try {
       const res = await listarProductosAdmin();
+
       const mapped: ProductoItem[] = res.map((p) => ({
         id: p.id,
         nombre: p.nombre,
@@ -87,9 +98,10 @@ export default function AdminProductosPage() {
         activo: p.activo ?? true,
         createdAt: p.createdAt,
       }));
+
       setProductos(mapped);
     } catch (err) {
-      setBannerError(mapearError(err));
+      setLoadError(mapearError(err));
     } finally {
       setLoading(false);
     }
@@ -104,15 +116,23 @@ export default function AdminProductosPage() {
     if (nuevoStock < 0) return;
 
     setAccionId(id);
+
     try {
       await actualizarProductoAdmin(id, { stock: nuevoStock });
-      
-      // Actualizamos el estado local inmediatamente
-      setProductos((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, stock: nuevoStock } : p))
-      );
-    } catch (err) {
-      setBannerError("No se pudo actualizar el inventario.");
+
+      setProductos((prev) => prev.map((p) => (p.id === id ? { ...p, stock: nuevoStock } : p)));
+
+      mostrarFeedback({
+        title: "Stock actualizado",
+        message: "El inventario del producto fue actualizado correctamente.",
+        variant: "success",
+      });
+    } catch {
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: "No se pudo actualizar el inventario.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -167,13 +187,20 @@ export default function AdminProductosPage() {
     return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(valor);
   };
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
   function abrirCrear() {
-    resetBanners();
     setEditId(null);
     setForm({ nombre: "", descripcion: "", precio: "", stock: "", imagenUrl: "" });
     setTouched({ nombre: false, precio: false, stock: false });
@@ -182,7 +209,6 @@ export default function AdminProductosPage() {
   }
 
   function abrirEditar(item: ProductoItem) {
-    resetBanners();
     setEditId(item.id);
     setForm({
       nombre: item.nombre,
@@ -203,33 +229,51 @@ export default function AdminProductosPage() {
   }
 
   async function onSubirFoto(file: File) {
-    resetBanners();
     if (file.size > 10 * 1024 * 1024) {
-      setBannerError("La imagen es muy pesada (máx 10MB).");
+      mostrarFeedback({
+        title: "Imagen muy pesada",
+        message: "La imagen supera el peso máximo permitido de 10MB.",
+        variant: "error",
+      });
       return;
     }
 
     try {
       setUploadingFoto(true);
+
       const up = await subirImagenCloudinary({
         file,
         variant: "productos",
-        folder: "bawstudio/productos", 
+        folder: "bawstudio/productos",
       });
+
       setForm((p) => ({ ...p, imagenUrl: up.secureUrl }));
+
+      mostrarFeedback({
+        title: "Imagen cargada",
+        message: "La imagen fue subida correctamente. Guarda el producto para aplicar el cambio.",
+        variant: "success",
+      });
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo subir la foto.");
+      mostrarFeedback({
+        title: "No se pudo subir la foto",
+        message: e?.message ? String(e.message) : "No se pudo subir la foto.",
+        variant: "error",
+      });
     } finally {
       setUploadingFoto(false);
     }
   }
 
   async function guardar() {
-    resetBanners();
     setTouched({ nombre: true, precio: true, stock: true });
 
     if (!canSave) {
-      setBannerError("Revisa los campos marcados.");
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de guardar.",
+        variant: "error",
+      });
       return;
     }
 
@@ -239,17 +283,21 @@ export default function AdminProductosPage() {
 
     const existe = productos.some(
       (p) =>
-        p.nombre.toLowerCase() === payloadNombre.toLowerCase() &&
-        (editId ? p.id !== editId : true),
+        p.nombre.toLowerCase() === payloadNombre.toLowerCase() && (editId ? p.id !== editId : true),
     );
+
     if (existe) {
-      setBannerError("Ya existe un producto con ese nombre.");
+      mostrarFeedback({
+        title: "Producto duplicado",
+        message: "Ya existe un producto con ese nombre.",
+        variant: "error",
+      });
       return;
     }
 
     try {
       setAccionId(editId ?? "create");
-      
+
       const datosProducto = {
         nombre: payloadNombre,
         descripcion: payloadDesc ? payloadDesc : null,
@@ -260,45 +308,79 @@ export default function AdminProductosPage() {
 
       if (!editId) {
         await crearProductoAdmin({ ...datosProducto, activo: true });
-        setBannerOk("Producto creado ✔︎");
-      } else {
-        await actualizarProductoAdmin(editId, datosProducto);
-        setBannerOk("Producto actualizado ✔︎");
+
+        setModalOpen(false);
+
+        mostrarFeedback({
+          title: "Producto creado",
+          message: "El producto fue registrado correctamente.",
+          variant: "success",
+        });
+
+        await refetchProductos();
+        return;
       }
 
+      await actualizarProductoAdmin(editId, datosProducto);
+
       setModalOpen(false);
+
+      mostrarFeedback({
+        title: "Producto actualizado",
+        message: "Los cambios del producto fueron guardados correctamente.",
+        variant: "success",
+      });
+
       await refetchProductos();
     } catch (err) {
-      setBannerError(mapearError(err));
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: mapearError(err),
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
   function pedirEliminar(item: ProductoItem) {
-    resetBanners();
-    setConfirm({ open: true, id: item.id });
-  }
-
-  async function confirmarEliminar() {
-    if (!confirm.id) return;
-
-    try {
-      setAccionId(confirm.id);
-      await eliminarProductoAdmin(confirm.id);
-
-      setBannerOk("Producto eliminado de forma permanente ✔︎");
-      setConfirm({ open: false, id: null });
-      await refetchProductos();
-    } catch (err) {
-      setBannerError(mapearError(err));
-    } finally {
-      setAccionId(null);
-    }
+    setDeleteTarget({
+      id: item.id,
+      nombre: item.nombre,
+    });
   }
 
   function cancelarEliminar() {
-    setConfirm({ open: false, id: null });
+    if (accionId === deleteTarget?.id) return;
+    setDeleteTarget(null);
+  }
+
+  async function confirmarEliminar() {
+    if (!deleteTarget?.id) return;
+
+    try {
+      setAccionId(deleteTarget.id);
+
+      await eliminarProductoAdmin(deleteTarget.id);
+
+      setDeleteTarget(null);
+
+      mostrarFeedback({
+        title: "Producto eliminado",
+        message: "El producto fue eliminado de forma permanente.",
+        variant: "success",
+      });
+
+      await refetchProductos();
+    } catch (err) {
+      mostrarFeedback({
+        title: "No se pudo eliminar",
+        message: mapearError(err),
+        variant: "error",
+      });
+    } finally {
+      setAccionId(null);
+    }
   }
 
   return (
@@ -318,18 +400,11 @@ export default function AdminProductosPage() {
         </button>
       </div>
 
-      {/* Banners */}
-      {bannerOk && (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
-        </div>
-      )}
-
-      {bannerError && (
+      {loadError ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
+          {loadError}
         </div>
-      )}
+      ) : null}
 
       {/* Loading */}
       {loading && (
@@ -390,46 +465,56 @@ export default function AdminProductosPage() {
                 </tr>
               ) : (
                 productosFiltrados.map((p) => (
-                  <tr key={p.id} className={`border-t border-neutral-100 hover:bg-neutral-50/50 transition-opacity ${accionId === p.id ? 'opacity-50' : 'opacity-100'}`}>
+                  <tr
+                    key={p.id}
+                    className={`border-t border-neutral-100 transition-opacity hover:bg-neutral-50/50 ${accionId === p.id ? "opacity-50" : "opacity-100"}`}
+                  >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-4">
                         {/* Imagen más grande */}
-                        <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 flex-shrink-0 shadow-sm">
+                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 shadow-sm">
                           {p.imagenUrl ? (
-                            <Image src={p.imagenUrl} alt={p.nombre} fill className="object-cover transition-transform hover:scale-110" />
+                            <Image
+                              src={p.imagenUrl}
+                              alt={p.nombre}
+                              fill
+                              className="object-cover transition-transform hover:scale-110"
+                            />
                           ) : (
-                            <span className="flex h-full items-center justify-center text-[10px] text-neutral-400">Sin img</span>
+                            <span className="flex h-full items-center justify-center text-[10px] text-neutral-400">
+                              Sin img
+                            </span>
                           )}
                         </div>
                         <div>
-                          <div className="font-bold text-black text-base">{p.nombre}</div>
-                          <div className="text-xs text-neutral-500 line-clamp-2 max-w-[200px]">{p.descripcion ?? "—"}</div>
+                          <div className="text-base font-bold text-black">{p.nombre}</div>
+                          <div className="line-clamp-2 max-w-[200px] text-xs text-neutral-500">
+                            {p.descripcion ?? "—"}
+                          </div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 font-semibold text-black">
-                      {formatearCLP(p.precio)}
-                    </td>
+                    <td className="px-4 py-3 font-semibold text-black">{formatearCLP(p.precio)}</td>
 
                     <td className="px-4 py-3">
-                      <div className={`inline-flex items-center gap-2 rounded-full border px-2 py-1.5 text-xs font-bold transition-all ${p.stock > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+                      <div
+                        className={`inline-flex items-center gap-2 rounded-full border px-2 py-1.5 text-xs font-bold transition-all ${p.stock > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}
+                      >
                         <button
                           onClick={() => handleUpdateStock(p.id, p.stock - 1)}
                           disabled={p.stock <= 0 || accionId !== null}
-                          className="flex h-6 w-6 items-center justify-center rounded-full bg-white border border-neutral-300 hover:bg-neutral-100 disabled:opacity-30 active:scale-90"
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-300 bg-white hover:bg-neutral-100 active:scale-90 disabled:opacity-30"
                         >
                           -
                         </button>
-                        
-                        <span className="min-w-[4ch] text-center">
-                          ● {p.stock} unid.
-                        </span>
+
+                        <span className="min-w-[4ch] text-center">● {p.stock} unid.</span>
 
                         <button
                           onClick={() => handleUpdateStock(p.id, p.stock + 1)}
                           disabled={accionId !== null}
-                          className="flex h-6 w-6 items-center justify-center rounded-full bg-white border border-neutral-300 hover:bg-neutral-100 active:scale-90"
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-300 bg-white hover:bg-neutral-100 active:scale-90"
                         >
                           +
                         </button>
@@ -447,7 +532,7 @@ export default function AdminProductosPage() {
 
                         <button
                           onClick={() => pedirEliminar(p)}
-                          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 hover:border-red-300"
+                          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:border-red-300 hover:bg-red-50"
                         >
                           Eliminar
                         </button>
@@ -472,11 +557,13 @@ export default function AdminProductosPage() {
             productosFiltrados.map((p) => (
               <div key={p.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
                 <div className="flex items-start gap-3">
-                  <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 flex-shrink-0 shadow-sm">
+                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 shadow-sm">
                     {p.imagenUrl ? (
                       <Image src={p.imagenUrl} alt={p.nombre} fill className="object-cover" />
                     ) : (
-                      <span className="flex h-full items-center justify-center text-[10px] text-neutral-400 font-medium">Sin img</span>
+                      <span className="flex h-full items-center justify-center text-[10px] font-medium text-neutral-400">
+                        Sin img
+                      </span>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -484,10 +571,22 @@ export default function AdminProductosPage() {
                     <div className="mt-1 flex items-center justify-between">
                       <p className="text-sm font-semibold text-black">{formatearCLP(p.precio)}</p>
                       {/* Stock móvil con botones integrados */}
-                      <div className={`flex items-center gap-2 rounded-full border px-2 py-1 text-[10px] font-bold ${p.stock > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
-                        <button onClick={() => handleUpdateStock(p.id, p.stock - 1)} className="h-5 w-5 bg-white rounded-full border">-</button>
+                      <div
+                        className={`flex items-center gap-2 rounded-full border px-2 py-1 text-[10px] font-bold ${p.stock > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}
+                      >
+                        <button
+                          onClick={() => handleUpdateStock(p.id, p.stock - 1)}
+                          className="h-5 w-5 rounded-full border bg-white"
+                        >
+                          -
+                        </button>
                         <span>{p.stock}</span>
-                        <button onClick={() => handleUpdateStock(p.id, p.stock + 1)} className="h-5 w-5 bg-white rounded-full border">+</button>
+                        <button
+                          onClick={() => handleUpdateStock(p.id, p.stock + 1)}
+                          className="h-5 w-5 rounded-full border bg-white"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -519,13 +618,15 @@ export default function AdminProductosPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={cerrarModal} />
 
-          <div className="relative w-full max-w-xl rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-black">
                   {editId ? "Editar producto" : "Registrar producto"}
                 </h2>
-                <p className="mt-1 text-sm text-neutral-600 font-medium">Ingresa la información detallada para la tienda.</p>
+                <p className="mt-1 text-sm font-medium text-neutral-600">
+                  Ingresa la información detallada para la tienda.
+                </p>
               </div>
 
               <button
@@ -536,27 +637,33 @@ export default function AdminProductosPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-1 md:col-span-2">
-                <label className="text-xs font-bold text-neutral-600 uppercase tracking-wide">Nombre del producto *</label>
+                <label className="text-xs font-bold tracking-wide text-neutral-600 uppercase">
+                  Nombre del producto *
+                </label>
                 <input
                   value={form.nombre}
                   onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))}
                   onBlur={() => setTouched((p) => ({ ...p, nombre: true }))}
                   placeholder="Ej: Cera Mate Premium"
-                  className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-black outline-none transition-all ${
+                  className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-black transition-all outline-none ${
                     nombreError ? "border-red-400" : "border-neutral-200 focus:border-black"
                   }`}
                 />
-                {nombreError && <p className="text-xs text-red-600 font-medium">{nombreError}</p>}
+                {nombreError && <p className="text-xs font-medium text-red-600">{nombreError}</p>}
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-neutral-600 uppercase tracking-wide">Precio (CLP) *</label>
+                <label className="text-xs font-bold tracking-wide text-neutral-600 uppercase">
+                  Precio (CLP) *
+                </label>
                 <input
                   type="number"
                   value={form.precio}
-                  onChange={(e) => setForm((p) => ({ ...p, precio: e.target.value ? Number(e.target.value) : "" }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, precio: e.target.value ? Number(e.target.value) : "" }))
+                  }
                   onBlur={() => setTouched((p) => ({ ...p, precio: true }))}
                   placeholder="Ej: 15000"
                   className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-black outline-none ${
@@ -566,11 +673,15 @@ export default function AdminProductosPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-neutral-600 uppercase tracking-wide">Stock Inicial *</label>
+                <label className="text-xs font-bold tracking-wide text-neutral-600 uppercase">
+                  Stock Inicial *
+                </label>
                 <input
                   type="number"
                   value={form.stock}
-                  onChange={(e) => setForm((p) => ({ ...p, stock: e.target.value ? Number(e.target.value) : "" }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, stock: e.target.value ? Number(e.target.value) : "" }))
+                  }
                   onBlur={() => setTouched((p) => ({ ...p, stock: true }))}
                   placeholder="Ej: 10"
                   className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-black outline-none ${
@@ -580,14 +691,16 @@ export default function AdminProductosPage() {
               </div>
 
               <div className="space-y-1 md:col-span-2">
-                <label className="text-xs font-bold text-neutral-600 uppercase tracking-wide">Foto del producto (subir)</label>
-                <div className="flex items-center gap-4 mt-2 p-3 bg-neutral-50 rounded-xl border border-neutral-100">
+                <label className="text-xs font-bold tracking-wide text-neutral-600 uppercase">
+                  Foto del producto (subir)
+                </label>
+                <div className="mt-2 flex items-center gap-4 rounded-xl border border-neutral-100 bg-neutral-50 p-3">
                   {form.imagenUrl && (
-                    <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-neutral-200 bg-white flex-shrink-0 shadow-sm">
+                    <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
                       <Image src={form.imagenUrl} alt="Preview" fill className="object-cover" />
                     </div>
                   )}
-                  
+
                   <div className="flex-1">
                     <input
                       ref={fileInputRef}
@@ -603,15 +716,23 @@ export default function AdminProductosPage() {
                       }}
                     />
                     <div className="mt-1 flex items-center justify-between">
-                      <p className="text-[10px] text-neutral-500 font-medium tracking-tight">JPG/PNG. Máx 10MB.</p>
-                      {uploadingFoto && <p className="text-[10px] font-bold text-blue-600 animate-pulse">SUBIENDO...</p>}
+                      <p className="text-[10px] font-medium tracking-tight text-neutral-500">
+                        JPG/PNG. Máx 10MB.
+                      </p>
+                      {uploadingFoto && (
+                        <p className="animate-pulse text-[10px] font-bold text-blue-600">
+                          SUBIENDO...
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1 md:col-span-2">
-                <label className="text-xs font-bold text-neutral-600 uppercase tracking-wide">Descripción</label>
+                <label className="text-xs font-bold tracking-wide text-neutral-600 uppercase">
+                  Descripción
+                </label>
                 <textarea
                   value={form.descripcion}
                   onChange={(e) => setForm((p) => ({ ...p, descripcion: e.target.value }))}
@@ -625,14 +746,14 @@ export default function AdminProductosPage() {
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 onClick={cerrarModal}
-                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-bold text-black hover:bg-neutral-50 transition-colors"
+                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-neutral-50"
               >
                 Cancelar
               </button>
 
               <button
                 onClick={() => void guardar()}
-                className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-neutral-800 disabled:opacity-50 transition-all active:scale-95"
+                className="rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-neutral-800 active:scale-95 disabled:opacity-50"
                 disabled={!canSave || uploadingFoto || accionId === (editId ?? "create")}
               >
                 {accionId === (editId ?? "create") ? "Guardando..." : "Confirmar Cambios"}
@@ -642,37 +763,33 @@ export default function AdminProductosPage() {
         </div>
       )}
 
-      {/* Confirmación de Eliminación */}
-      {confirm.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={cancelarEliminar} />
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Eliminar producto"
+        message={
+          deleteTarget
+            ? `Esta acción no se puede deshacer. ¿Seguro que quieres eliminar el producto "${deleteTarget.nombre}"?`
+            : ""
+        }
+        confirmText={accionId === deleteTarget?.id ? "Eliminando..." : "Sí, eliminar"}
+        cancelText="Volver"
+        variant="danger"
+        onConfirm={() => void confirmarEliminar()}
+        onClose={cancelarEliminar}
+      />
 
-          <div className="relative w-full max-w-sm rounded-3xl border border-neutral-200 bg-white p-8 shadow-2xl text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 text-red-600 mb-4 font-bold text-xl">!</div>
-            <h3 className="text-lg font-bold text-black">¿Eliminar producto?</h3>
-            <p className="mt-2 text-sm text-neutral-600 font-medium">
-              Esta acción no se puede deshacer y el producto desaparecerá de la tienda permanentemente.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-2">
-              <button
-                onClick={() => void confirmarEliminar()}
-                disabled={accionId === confirm.id}
-                className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-all active:scale-95"
-              >
-                {accionId === confirm.id ? "Eliminando..." : "Sí, eliminar producto"}
-              </button>
-              
-              <button
-                onClick={cancelarEliminar}
-                className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-bold text-black hover:bg-neutral-50 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

@@ -8,8 +8,9 @@ const links = [
   { href: "/admin/servicios", label: "Servicios" },
   { href: "/admin/barberos", label: "Barberos" },
   { href: "/admin/reservas", label: "Reservas" },
-  { href: "/admin/settings", label: "Configuración" },
   { href: "/admin/productos", label: "Productos" },
+  { href: "/admin/settings", label: "Configuración" },
+  
 ];
 
 export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {

@@ -204,15 +204,10 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
               className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
               style={{ backgroundColor: `${secondaryColor}33` }}
             />
+            <h2 className="text-2xl font-semibold text-white">Servicios</h2>
 
-            <div
-              className="mb-6 h-1 w-24 rounded-full"
-              style={{ backgroundColor: secondaryColor }}
-            />
-
-            <div className="relative">
-              <h2 className="text-2xl font-semibold text-white">Servicios</h2>
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="mt-6 h-[380px] overflow-y-auto pr-2 [scrollbar-width:thin]">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {servicios.length === 0 ? (
                   <div
                     className="rounded-2xl border bg-white/10 p-4 text-sm text-white/70"
@@ -271,11 +266,6 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
               style={{ backgroundColor: `${secondaryColor}33` }}
             />
 
-            <div
-              className="mb-4 h-1 w-24 rounded-full"
-              style={{ backgroundColor: secondaryColor }}
-            />
-
             <div className="relative">
               {trabajos.length === 0 ? (
                 <div
@@ -303,10 +293,6 @@ export default async function BarberoPublicPage({ params }: { params: Promise<{ 
             <div
               className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl"
               style={{ backgroundColor: `${secondaryColor}33` }}
-            />
-            <div
-              className="mb-6 h-1 w-24 rounded-full"
-              style={{ backgroundColor: secondaryColor }}
             />
 
             <div className="relative">

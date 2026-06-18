@@ -4,10 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBarberoServicios } from "@/lib/useBarberoServicios";
 import { actualizarMiServicioBarbero } from "@/services/barbero-servicios.service";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 type EditState = {
   price: string;
   durationMin: string;
+};
+
+type ToggleServicioTarget = {
+  id: string;
+  name: string;
+  nextActive: boolean;
 };
 
 function formatCLP(value: string) {
@@ -21,8 +29,15 @@ export default function BarberoServiciosPage() {
   const { data, loading, error, refetch } = useBarberoServicios();
 
   const [accionId, setAccionId] = useState<string | null>(null);
-  const [mensajeOk, setMensajeOk] = useState("");
-  const [mensajeError, setMensajeError] = useState("");
+
+  const [toggleTarget, setToggleTarget] = useState<ToggleServicioTarget | null>(null);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // inputs controlados por item
   const initialEdits = useMemo(() => {
@@ -54,23 +69,41 @@ export default function BarberoServiciosPage() {
     return Number.isFinite(n) && n >= 0;
   }
 
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
+
   async function handleGuardar(id: string) {
     const v = edits.get(id);
     if (!v) return;
 
-    setMensajeOk("");
-    setMensajeError("");
-
-    const priceStr = String(v.price).trim(); // ✅ backend pide string
+    const priceStr = String(v.price).trim();
     const durationNum = Number(String(v.durationMin).trim());
 
     if (!priceStr || !isValidNumber(priceStr)) {
-      setMensajeError("Precio inválido. Usa un número (ej: 12000).");
+      mostrarFeedback({
+        title: "Precio inválido",
+        message: "Usa un número válido para el precio. Ejemplo: 12000.",
+        variant: "error",
+      });
       return;
     }
 
     if (!String(v.durationMin).trim() || Number.isNaN(durationNum) || durationNum <= 0) {
-      setMensajeError("Duración inválida. Usa minutos (ej: 45).");
+      mostrarFeedback({
+        title: "Duración inválida",
+        message: "Usa una duración válida en minutos. Ejemplo: 45.",
+        variant: "error",
+      });
       return;
     }
 
@@ -78,40 +111,86 @@ export default function BarberoServiciosPage() {
       setAccionId(id);
 
       await actualizarMiServicioBarbero(id, {
-        price: Number(priceStr), // ✅ convert to number
-        durationMin: durationNum, // ✅ number
+        price: Number(priceStr),
+        durationMin: durationNum,
       });
 
-      setMensajeOk("Cambios guardados ✔︎");
+      mostrarFeedback({
+        title: "Cambios guardados",
+        message: "El precio y la duración del servicio fueron actualizados.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
       if (e?.status === 401) {
-        setMensajeError(e?.message ?? "Sesión expirada. Vuelve a iniciar sesión.");
+        mostrarFeedback({
+          title: "Sesión expirada",
+          message: e?.message ?? "Vuelve a iniciar sesión.",
+          variant: "error",
+        });
+
         router.push("/barbero/login");
         return;
       }
-      setMensajeError(e?.message ? String(e.message) : "No se pudieron guardar los cambios.");
+
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: e?.message ? String(e.message) : "No se pudieron guardar los cambios.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
-  async function handleToggleActivo(id: string, nextActive: boolean) {
-    setMensajeOk("");
-    setMensajeError("");
+  function abrirToggleActivo(params: ToggleServicioTarget) {
+    setToggleTarget(params);
+  }
+
+  function cerrarToggleActivo() {
+    if (accionId === toggleTarget?.id) return;
+    setToggleTarget(null);
+  }
+
+  async function confirmarToggleActivo() {
+    if (!toggleTarget) return;
 
     try {
-      setAccionId(id);
-      await actualizarMiServicioBarbero(id, { isActive: nextActive });
-      setMensajeOk(nextActive ? "Servicio activado ✔︎" : "Servicio desactivado ✔︎");
+      setAccionId(toggleTarget.id);
+
+      await actualizarMiServicioBarbero(toggleTarget.id, {
+        isActive: toggleTarget.nextActive,
+      });
+
+      setToggleTarget(null);
+
+      mostrarFeedback({
+        title: toggleTarget.nextActive ? "Servicio activado" : "Servicio desactivado",
+        message: toggleTarget.nextActive
+          ? "El servicio ahora estará disponible para reservas."
+          : "El servicio ya no estará disponible para nuevas reservas.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
       if (e?.status === 401) {
-        setMensajeError(e?.message ?? "Sesión expirada. Vuelve a iniciar sesión.");
+        mostrarFeedback({
+          title: "Sesión expirada",
+          message: e?.message ?? "Vuelve a iniciar sesión.",
+          variant: "error",
+        });
+
         router.push("/barbero/login");
         return;
       }
-      setMensajeError(e?.message ? String(e.message) : "No se pudo actualizar el estado del servicio.");
+
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: e?.message ? String(e.message) : "No se pudo actualizar el estado del servicio.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -125,19 +204,6 @@ export default function BarberoServiciosPage() {
           Edita tu precio y duración. También puedes activar/desactivar servicios (solo para ti).
         </p>
       </div>
-
-      {/* mensajes */}
-      {!loading && !error && mensajeOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {mensajeOk}
-        </div>
-      ) : null}
-
-      {!loading && mensajeError ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {mensajeError}
-        </div>
-      ) : null}
 
       {loading ? (
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
@@ -174,8 +240,10 @@ export default function BarberoServiciosPage() {
                   </tr>
                 ) : (
                   data.map((it) => {
-                    const edit =
-                      edits.get(it.id) ?? { price: String(it.price), durationMin: String(it.durationMin) };
+                    const edit = edits.get(it.id) ?? {
+                      price: String(it.price),
+                      durationMin: String(it.durationMin),
+                    };
                     const busy = accionId === it.id;
 
                     return (
@@ -195,7 +263,9 @@ export default function BarberoServiciosPage() {
                             inputMode="numeric"
                             disabled={busy}
                           />
-                          <div className="mt-1 text-xs text-neutral-500">CLP: {formatCLP(edit.price)}</div>
+                          <div className="mt-1 text-xs text-neutral-500">
+                            CLP: {formatCLP(edit.price)}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3">
@@ -232,9 +302,20 @@ export default function BarberoServiciosPage() {
                             </button>
 
                             <button
-                              onClick={() => void handleToggleActivo(it.id, !it.isActive)}
+                              onClick={() =>
+                                abrirToggleActivo({
+                                  id: it.id,
+                                  name: it.service.name,
+                                  nextActive: !it.isActive,
+                                })
+                              }
                               disabled={busy}
-                              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
+                              className={[
+                                "rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                                it.isActive
+                                  ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                                  : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                              ].join(" ")}
                             >
                               {it.isActive ? "Desactivar" : "Activar"}
                             </button>
@@ -256,8 +337,10 @@ export default function BarberoServiciosPage() {
               </div>
             ) : (
               data.map((it) => {
-                const edit =
-                  edits.get(it.id) ?? { price: String(it.price), durationMin: String(it.durationMin) };
+                const edit = edits.get(it.id) ?? {
+                  price: String(it.price),
+                  durationMin: String(it.durationMin),
+                };
                 const busy = accionId === it.id;
 
                 return (
@@ -315,9 +398,20 @@ export default function BarberoServiciosPage() {
                       </button>
 
                       <button
-                        onClick={() => void handleToggleActivo(it.id, !it.isActive)}
+                        onClick={() =>
+                          abrirToggleActivo({
+                            id: it.id,
+                            name: it.service.name,
+                            nextActive: !it.isActive,
+                          })
+                        }
                         disabled={busy}
-                        className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
+                        className={[
+                          "w-full rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                          it.isActive
+                            ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                            : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                        ].join(" ")}
                       >
                         {it.isActive ? "Desactivar" : "Activar"}
                       </button>
@@ -329,6 +423,44 @@ export default function BarberoServiciosPage() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(toggleTarget)}
+        title={toggleTarget?.nextActive ? "Activar servicio" : "Desactivar servicio"}
+        message={
+          toggleTarget
+            ? toggleTarget.nextActive
+              ? `¿Seguro que quieres activar el servicio "${toggleTarget.name}"? Este servicio volverá a estar disponible para reservas.`
+              : `¿Seguro que quieres desactivar el servicio "${toggleTarget.name}"? No estará disponible para nuevas reservas.`
+            : ""
+        }
+        confirmText={
+          accionId === toggleTarget?.id
+            ? toggleTarget?.nextActive
+              ? "Activando..."
+              : "Desactivando..."
+            : toggleTarget?.nextActive
+              ? "Sí, activar"
+              : "Sí, desactivar"
+        }
+        cancelText="Volver"
+        variant={toggleTarget?.nextActive ? "default" : "danger"}
+        onConfirm={() => void confirmarToggleActivo()}
+        onClose={cerrarToggleActivo}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

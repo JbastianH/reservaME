@@ -9,6 +9,8 @@ import { cancelarReservaAdmin } from "@/services/reservas.service";
 
 import { useAdminBarberos } from "@/lib/useAdminBarberos";
 import ReservaModal from "@/componentes/publico/ReservaModal";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 function formatCLP(value: unknown) {
   const n = typeof value === "string" ? Number(value) : typeof value === "number" ? value : NaN;
@@ -81,8 +83,13 @@ export default function AdminReservasPage() {
   const barberos = (barberosData ?? []) as any[];
 
   const [accionId, setAccionId] = useState<string | null>(null);
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // modal reprogramación (slots)
   const [reprogOpen, setReprogOpen] = useState(false);
@@ -90,25 +97,56 @@ export default function AdminReservasPage() {
 
   // modal confirmación cancelar (custom)
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<any | null>(null);
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
-
   function onChangeFiltro() {
     setPage(1);
   }
 
-  async function completar(id: string) {
-    resetBanners();
+  function abrirCompletar(r: any) {
+    setCompleteTarget(r);
+  }
+
+  function cerrarCompletar() {
+    if (accionId === completeTarget?.id) return;
+    setCompleteTarget(null);
+  }
+
+  async function confirmarCompletar() {
+    if (!completeTarget?.id) return;
+
     try {
-      setAccionId(id);
-      await completarReservaAdmin(id);
-      setBannerOk("Reserva marcada como COMPLETADA ✔︎");
+      setAccionId(completeTarget.id);
+
+      await completarReservaAdmin(completeTarget.id);
+
+      setCompleteTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva completada",
+        message: "La reserva fue marcada como completada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo completar la reserva.");
+      mostrarFeedback({
+        title: "No se pudo completar",
+        message: e?.message ? String(e.message) : "No se pudo completar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -128,13 +166,15 @@ export default function AdminReservasPage() {
   }
 
   function abrirReprogramar(r: any) {
-    resetBanners();
-
     const slug = resolverSlugDeReserva(r);
     const barberIdReal = r?.barber?.id ?? r?.barberId ?? "";
 
     if (!slug) {
-      setBannerError("No se pudo reprogramar: falta el 'slug' del barbero en los datos.");
+      mostrarFeedback({
+        title: "No se pudo reprogramar",
+        message: "Falta el identificador público del barbero en los datos.",
+        variant: "error",
+      });
       return;
     }
 
@@ -143,6 +183,7 @@ export default function AdminReservasPage() {
       barberSlug: slug,
       barberId: barberIdReal,
     });
+
     setReprogOpen(true);
   }
 
@@ -152,26 +193,37 @@ export default function AdminReservasPage() {
   }
 
   function abrirCancelar(r: any) {
-    resetBanners();
     setCancelTarget(r);
   }
 
   function cerrarCancelar() {
+    if (accionId === cancelTarget?.id) return;
     setCancelTarget(null);
   }
 
   async function confirmarCancelar() {
     if (!cancelTarget?.id) return;
 
-    resetBanners();
     try {
       setAccionId(cancelTarget.id);
+
       await cancelarReservaAdmin(cancelTarget.id);
-      setBannerOk("Reserva cancelada ✔︎");
-      cerrarCancelar();
+
+      setCancelTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva cancelada",
+        message: "La reserva fue cancelada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo cancelar la reserva.");
+      mostrarFeedback({
+        title: "No se pudo cancelar",
+        message: e?.message ? String(e.message) : "No se pudo cancelar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -191,14 +243,9 @@ export default function AdminReservasPage() {
         </div>
       </div>
 
-      {bannerOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
-        </div>
-      ) : null}
-      {bannerError ? (
+      {!loading && error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
+          {error}
         </div>
       ) : null}
 
@@ -337,7 +384,7 @@ export default function AdminReservasPage() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <button
-                              onClick={() => completar(r.id)}
+                              onClick={() => abrirCompletar(r)}
                               disabled={disabledAcciones}
                               className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                             >
@@ -422,7 +469,7 @@ export default function AdminReservasPage() {
 
                     <div className="mt-4 grid grid-cols-1 gap-2">
                       <button
-                        onClick={() => completar(r.id)}
+                        onClick={() => abrirCompletar(r)}
                         disabled={disabledAcciones}
                         className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                       >
@@ -495,48 +542,65 @@ export default function AdminReservasPage() {
           reservaId={reprogTarget.id}
           initialDate={isoToYYYYMMDD(reprogTarget.startAt)}
           onSuccess={async (info) => {
-            setBannerOk(info.mensaje || "Reserva reprogramada. Correo enviado ✔︎");
-            setBannerError("");
-            await refetch();
             cerrarReprogramar();
+
+            mostrarFeedback({
+              title: "Reserva reprogramada",
+              message: info.mensaje || "La reserva fue reprogramada correctamente.",
+              variant: "success",
+            });
+
+            await refetch();
           }}
         />
       ) : null}
 
-      {/* Modal Confirmar cancelación (custom) */}
-      {cancelTarget ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-black">Cancelar reserva</h3>
+      <ConfirmDialog
+        open={Boolean(completeTarget)}
+        title="Completar reserva"
+        message={
+          completeTarget
+            ? `¿Seguro que quieres marcar como completada la reserva de ${
+                completeTarget.clientName ?? "este cliente"
+              }?`
+            : ""
+        }
+        confirmText={accionId === completeTarget?.id ? "Completando..." : "Sí, completar"}
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void confirmarCompletar()}
+        onClose={cerrarCompletar}
+      />
 
-            <p className="mt-2 text-sm text-neutral-600">
-              Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de{" "}
-              <span className="font-medium text-black">{cancelTarget.clientName ?? "cliente"}</span>
-              ?
-            </p>
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancelar reserva"
+        message={
+          cancelTarget
+            ? `Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de ${
+                cancelTarget.clientName ?? "este cliente"
+              }?`
+            : ""
+        }
+        confirmText={accionId === cancelTarget?.id ? "Cancelando..." : "Sí, cancelar"}
+        cancelText="Volver"
+        variant="danger"
+        onConfirm={() => void confirmarCancelar()}
+        onClose={cerrarCancelar}
+      />
 
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={cerrarCancelar}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Volver
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void confirmarCancelar()}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {accionId === cancelTarget.id ? "Cancelando..." : "Sí, cancelar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

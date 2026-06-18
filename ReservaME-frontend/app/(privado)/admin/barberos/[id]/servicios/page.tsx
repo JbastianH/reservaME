@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useAdminBarberoServicios } from "@/lib/useAdminBarberoServicios";
 import {
   activarServicioDeBarberoAdmin,
-  actualizarServicioDeBarberoAdmin,
   asignarServicioABarberoAdmin,
   desactivarServicioDeBarberoAdmin,
   listarServiciosAdmin,
@@ -14,9 +13,17 @@ import {
   type AdminBarberoServicioItem,
 } from "@/services/admin-barbero-servicios.service";
 
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+
 function isValidMoney(v: string) {
-  if (!v.trim()) return false;
-  const n = Number(v);
+  const limpio = v.trim();
+
+  if (!limpio) return false;
+  if (limpio.includes(",")) return false;
+
+  const n = Number(limpio);
+
   return Number.isFinite(n) && n >= 0;
 }
 
@@ -31,6 +38,12 @@ function pillActivo(activo: boolean) {
     ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
     : "bg-neutral-500/10 text-neutral-700 border-neutral-500/30";
 }
+
+type ToggleBarberoServicioTarget = {
+  id: string;
+  name: string;
+  nextActive: boolean;
+};
 
 export default function AdminBarberoServiciosPage() {
   const router = useRouter();
@@ -70,22 +83,32 @@ export default function AdminBarberoServiciosPage() {
     durationMin: false,
   });
 
-  // Confirm activar/desactivar
-  const [confirm, setConfirm] = useState<{ open: boolean; id: string | null; nextActive: boolean }>({
-    open: false,
-    id: null,
-    nextActive: true,
-  });
+  const [asignarConfirmOpen, setAsignarConfirmOpen] = useState(false);
+  const [editarConfirmOpen, setEditarConfirmOpen] = useState(false);
 
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
+  const [toggleTarget, setToggleTarget] = useState<ToggleBarberoServicioTarget | null>(null);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // Busy global
   const [accionId, setAccionId] = useState<string | null>(null);
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
   // Carga catálogo de servicios (para asignar)
@@ -120,9 +143,7 @@ export default function AdminBarberoServiciosPage() {
   // Servicios disponibles para asignar (evita duplicados por unique(barberId, serviceId))
   const serviciosDisponibles = useMemo(() => {
     const usados = new Set(asignados.map((a) => a.serviceId));
-    return catalogo
-      .filter((s) => !usados.has(s.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return catalogo.filter((s) => !usados.has(s.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [catalogo, asignados]);
 
   // ===== Validaciones asignar =====
@@ -140,7 +161,8 @@ export default function AdminBarberoServiciosPage() {
 
   const asignarDurationError = useMemo(() => {
     if (!touchedAsignar.durationMin) return "";
-    if (!isValidDuration(formAsignar.durationMin)) return "Duración inválida (minutos, entero >= 0).";
+    if (!isValidDuration(formAsignar.durationMin))
+      return "Duración inválida (minutos, entero >= 0).";
     return "";
   }, [formAsignar.durationMin, touchedAsignar.durationMin]);
 
@@ -155,7 +177,8 @@ export default function AdminBarberoServiciosPage() {
 
   const editarDurationError = useMemo(() => {
     if (!touchedEditar.durationMin) return "";
-    if (!isValidDuration(formEditar.durationMin)) return "Duración inválida (minutos, entero >= 0).";
+    if (!isValidDuration(formEditar.durationMin))
+      return "Duración inválida (minutos, entero >= 0).";
     return "";
   }, [formEditar.durationMin, touchedEditar.durationMin]);
 
@@ -163,28 +186,72 @@ export default function AdminBarberoServiciosPage() {
 
   // ===== Acciones UI =====
   function abrirAsignar() {
-    resetBanners();
     setFormAsignar({ serviceId: "", price: "0", durationMin: "0" });
     setTouchedAsignar({ serviceId: false, price: false, durationMin: false });
+    setAsignarConfirmOpen(false);
     setModalAsignarOpen(true);
   }
 
   function cerrarAsignar() {
     if (accionId) return;
+    setAsignarConfirmOpen(false);
     setModalAsignarOpen(false);
   }
 
-  async function confirmarAsignar() {
-    resetBanners();
+  function pedirAsignar() {
     setTouchedAsignar({ serviceId: true, price: true, durationMin: true });
 
     if (!barberId) {
-      setBannerError("Falta el id del barbero en la ruta.");
+      mostrarFeedback({
+        title: "No se pudo asignar",
+        message: "Falta el id del barbero en la ruta.",
+        variant: "error",
+      });
       return;
     }
 
-    if (!canAsignar) {
-      setBannerError("Revisa los campos marcados.");
+    if (
+      !formAsignar.serviceId ||
+      !isValidMoney(formAsignar.price) ||
+      !isValidDuration(formAsignar.durationMin)
+    ) {
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de asignar el servicio.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setAsignarConfirmOpen(true);
+  }
+
+  async function confirmarAsignar() {
+    setTouchedAsignar({ serviceId: true, price: true, durationMin: true });
+
+    if (!barberId) {
+      setAsignarConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "No se pudo asignar",
+        message: "Falta el id del barbero en la ruta.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (
+      !formAsignar.serviceId ||
+      !isValidMoney(formAsignar.price) ||
+      !isValidDuration(formAsignar.durationMin)
+    ) {
+      setAsignarConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de asignar el servicio.",
+        variant: "error",
+      });
       return;
     }
 
@@ -197,11 +264,24 @@ export default function AdminBarberoServiciosPage() {
         durationMin: Number(formAsignar.durationMin),
       });
 
-      setBannerOk("Servicio asignado ✔︎");
+      setAsignarConfirmOpen(false);
       setModalAsignarOpen(false);
+
+      mostrarFeedback({
+        title: "Servicio asignado",
+        message: "El servicio fue asignado correctamente al barbero.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo asignar el servicio.");
+      setAsignarConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "No se pudo asignar",
+        message: e?.message ? String(e.message) : "No se pudo asignar el servicio.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -215,81 +295,152 @@ export default function AdminBarberoServiciosPage() {
     return asignarServicioABarberoAdmin(idBarbero, dto);
   }
 
-  function abrirEditar(item: AdminBarberoServicioItem) {
-    resetBanners();
-    setEditItem(item);
+  // function abrirEditar(item: AdminBarberoServicioItem) {
+  //   setEditItem(item);
 
-    // Si el backend manda Decimal como string, aquí se normaliza a string para inputs
-    const priceVal = item.price ?? "0";
-    const durVal = String(item.durationMin ?? 0);
+  //   const priceVal = item.price ?? "0";
+  //   const durVal = String(item.durationMin ?? 0);
 
-    setFormEditar({ price: priceVal, durationMin: durVal });
-    setTouchedEditar({ price: false, durationMin: false });
-    setModalEditarOpen(true);
-  }
+  //   setFormEditar({ price: priceVal, durationMin: durVal });
+  //   setTouchedEditar({ price: false, durationMin: false });
+  //   setEditarConfirmOpen(false);
+  //   setModalEditarOpen(true);
+  // }
 
-  function cerrarEditar() {
-    if (accionId) return;
-    setModalEditarOpen(false);
-    setEditItem(null);
-  }
+  // function cerrarEditar() {
+  //   if (accionId) return;
+  //   setEditarConfirmOpen(false);
+  //   setModalEditarOpen(false);
+  //   setEditItem(null);
+  // }
 
-  async function confirmarEditar() {
-    resetBanners();
-    setTouchedEditar({ price: true, durationMin: true });
+  // function pedirEditar() {
+  //   setTouchedEditar({ price: true, durationMin: true });
 
-    if (!barberId || !editItem) return;
+  //   if (!barberId || !editItem) {
+  //     mostrarFeedback({
+  //       title: "No se pudo editar",
+  //       message: "Faltan datos para editar este servicio.",
+  //       variant: "error",
+  //     });
+  //     return;
+  //   }
 
-    if (!canEditar) {
-      setBannerError("Revisa los campos marcados.");
-      return;
-    }
+  //   if (!isValidMoney(formEditar.price) || !isValidDuration(formEditar.durationMin)) {
+  //     mostrarFeedback({
+  //       title: "Campos inválidos",
+  //       message: "Revisa el precio y la duración antes de guardar.",
+  //       variant: "error",
+  //     });
+  //     return;
+  //   }
 
-    try {
-      setAccionId(editItem.id);
+  //   setEditarConfirmOpen(true);
+  // }
 
-      await actualizarServicioDeBarberoAdmin(barberId, editItem.id, {
-        price: Number(formEditar.price),
-        durationMin: Number(formEditar.durationMin),
-      });
+  // async function confirmarEditar() {
+  //   setTouchedEditar({ price: true, durationMin: true });
 
-      setBannerOk("Servicio actualizado ✔︎");
-      setModalEditarOpen(false);
-      setEditItem(null);
-      await refetch();
-    } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo actualizar.");
-    } finally {
-      setAccionId(null);
-    }
-  }
+  //   if (!barberId || !editItem) {
+  //     setEditarConfirmOpen(false);
+  //     return;
+  //   }
+
+  //   const priceNumber = Number(formEditar.price);
+  //   const durationNumber = Number(formEditar.durationMin);
+
+  //   if (
+  //     !Number.isFinite(priceNumber) ||
+  //     priceNumber < 0 ||
+  //     !Number.isFinite(durationNumber) ||
+  //     durationNumber < 0 ||
+  //     !Number.isInteger(durationNumber)
+  //   ) {
+  //     setEditarConfirmOpen(false);
+
+  //     mostrarFeedback({
+  //       title: "Campos inválidos",
+  //       message: "Revisa el precio y la duración antes de guardar.",
+  //       variant: "error",
+  //     });
+
+  //     return;
+  //   }
+
+  //   try {
+  //     setAccionId(editItem.id);
+
+  //     await actualizarServicioDeBarberoAdmin(barberId, editItem.id, {
+  //       price: priceNumber,
+  //       durationMin: durationNumber,
+  //     });
+
+  //     setEditarConfirmOpen(false);
+  //     setModalEditarOpen(false);
+  //     setEditItem(null);
+
+  //     mostrarFeedback({
+  //       title: "Servicio actualizado",
+  //       message: "El precio y la duración fueron actualizados correctamente.",
+  //       variant: "success",
+  //     });
+
+  //     await refetch();
+  //   } catch (e: any) {
+  //     setEditarConfirmOpen(false);
+
+  //     mostrarFeedback({
+  //       title: "No se pudo actualizar",
+  //       message: e?.message ? String(e.message) : "No se pudo actualizar.",
+  //       variant: "error",
+  //     });
+  //   } finally {
+  //     setAccionId(null);
+  //   }
+  // }
 
   function pedirToggle(item: AdminBarberoServicioItem) {
-    resetBanners();
-    setConfirm({ open: true, id: item.id, nextActive: !item.isActive });
+    setToggleTarget({
+      id: item.id,
+      name: item.service?.name ?? "(servicio)",
+      nextActive: !item.isActive,
+    });
   }
 
   function cancelarToggle() {
-    if (accionId) return;
-    setConfirm({ open: false, id: null, nextActive: true });
+    if (accionId === toggleTarget?.id) return;
+    setToggleTarget(null);
   }
 
   async function confirmarToggle() {
-    if (!barberId || !confirm.id) return;
-
-    resetBanners();
+    if (!barberId || !toggleTarget) return;
 
     try {
-      setAccionId(confirm.id);
+      setAccionId(toggleTarget.id);
 
-      if (confirm.nextActive) await activarServicioDeBarberoAdmin(barberId, confirm.id);
-      else await desactivarServicioDeBarberoAdmin(barberId, confirm.id);
+      if (toggleTarget.nextActive) {
+        await activarServicioDeBarberoAdmin(barberId, toggleTarget.id);
+      } else {
+        await desactivarServicioDeBarberoAdmin(barberId, toggleTarget.id);
+      }
 
-      setBannerOk(confirm.nextActive ? "Servicio activado ✔︎" : "Servicio desactivado ✔︎");
-      setConfirm({ open: false, id: null, nextActive: true });
+      setToggleTarget(null);
+
+      mostrarFeedback({
+        title: toggleTarget.nextActive ? "Servicio activado" : "Servicio desactivado",
+        message: toggleTarget.nextActive
+          ? "El servicio volverá a estar disponible para este barbero."
+          : "El servicio ya no estará disponible para este barbero.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudo actualizar el estado.");
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: e?.message ? String(e.message) : "No se pudo actualizar el estado.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -322,16 +473,15 @@ export default function AdminBarberoServiciosPage() {
         </button>
       </div>
 
-      {/* Banners */}
-      {bannerOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
+      {loading ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
+          Cargando servicios asignados...
         </div>
       ) : null}
 
-      {bannerError ? (
+      {!loading && error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
+          {error}
         </div>
       ) : null}
 
@@ -402,7 +552,6 @@ export default function AdminBarberoServiciosPage() {
                       <tr key={x.id} className="border-t border-neutral-100">
                         <td className="px-4 py-3">
                           <div className="font-medium text-black">{nombre}</div>
-                          <div className="text-xs text-neutral-500">{x.serviceId}</div>
                         </td>
 
                         <td className="px-4 py-3 text-neutral-800">
@@ -423,18 +572,16 @@ export default function AdminBarberoServiciosPage() {
 
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => abrirEditar(x)}
-                              disabled={Boolean(accionId)}
-                              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
-                            >
-                              {rowBusy ? "Procesando..." : "Editar"}
-                            </button>
 
                             <button
                               onClick={() => pedirToggle(x)}
                               disabled={Boolean(accionId)}
-                              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
+                              className={[
+                                "rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                                x.isActive
+                                  ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                                  : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                              ].join(" ")}
                             >
                               {rowBusy ? "Procesando..." : x.isActive ? "Desactivar" : "Activar"}
                             </button>
@@ -458,14 +605,17 @@ export default function AdminBarberoServiciosPage() {
               asignadosFiltrados.map((x) => {
                 const rowBusy = accionId === x.id;
                 const nombre = x.service?.name ?? "(servicio)";
-                const precio = Number(x.price)
+                const precio = Number(x.price);
 
                 return (
                   <div key={x.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-black">{nombre}</p>
-                        <p className="mt-1 text-xs text-neutral-500">{x.durationMin} min • ${Number.isFinite(precio) ? precio.toLocaleString("es-CL") : "—"}</p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {x.durationMin} min • $
+                          {Number.isFinite(precio) ? precio.toLocaleString("es-CL") : "—"}
+                        </p>
                       </div>
 
                       <span
@@ -478,18 +628,16 @@ export default function AdminBarberoServiciosPage() {
                     </div>
 
                     <div className="mt-4 flex gap-2">
-                      <button
-                        onClick={() => abrirEditar(x)}
-                        disabled={Boolean(accionId)}
-                        className="flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-                      >
-                        {rowBusy ? "Procesando..." : "Editar"}
-                      </button>
 
                       <button
                         onClick={() => pedirToggle(x)}
                         disabled={Boolean(accionId)}
-                        className="flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
+                        className={[
+                          "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                          x.isActive
+                            ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                            : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                        ].join(" ")}
                       >
                         {rowBusy ? "Procesando..." : x.isActive ? "Desactivar" : "Activar"}
                       </button>
@@ -534,7 +682,9 @@ export default function AdminBarberoServiciosPage() {
                   onBlur={() => setTouchedAsignar((p) => ({ ...p, serviceId: true }))}
                   disabled={Boolean(accionId)}
                   className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-black outline-none ${
-                    asignarServiceIdError ? "border-red-400" : "border-neutral-300 focus:border-black"
+                    asignarServiceIdError
+                      ? "border-red-400"
+                      : "border-neutral-300 focus:border-black"
                   }`}
                 >
                   <option value="">-- Selecciona --</option>
@@ -544,7 +694,9 @@ export default function AdminBarberoServiciosPage() {
                     </option>
                   ))}
                 </select>
-                {asignarServiceIdError ? <p className="text-xs text-red-600">{asignarServiceIdError}</p> : null}
+                {asignarServiceIdError ? (
+                  <p className="text-xs text-red-600">{asignarServiceIdError}</p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -561,7 +713,9 @@ export default function AdminBarberoServiciosPage() {
                     placeholder="0"
                     inputMode="numeric"
                   />
-                  {asignarPriceError ? <p className="text-xs text-red-600">{asignarPriceError}</p> : null}
+                  {asignarPriceError ? (
+                    <p className="text-xs text-red-600">{asignarPriceError}</p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-1">
@@ -572,12 +726,16 @@ export default function AdminBarberoServiciosPage() {
                     onBlur={() => setTouchedAsignar((p) => ({ ...p, durationMin: true }))}
                     disabled={Boolean(accionId)}
                     className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-black outline-none ${
-                      asignarDurationError ? "border-red-400" : "border-neutral-300 focus:border-black"
+                      asignarDurationError
+                        ? "border-red-400"
+                        : "border-neutral-300 focus:border-black"
                     }`}
                     placeholder="0"
                     inputMode="numeric"
                   />
-                  {asignarDurationError ? <p className="text-xs text-red-600">{asignarDurationError}</p> : null}
+                  {asignarDurationError ? (
+                    <p className="text-xs text-red-600">{asignarDurationError}</p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -592,7 +750,7 @@ export default function AdminBarberoServiciosPage() {
               </button>
 
               <button
-                onClick={() => void confirmarAsignar()}
+                onClick={pedirAsignar}
                 disabled={!canAsignar || Boolean(accionId)}
                 className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
@@ -603,7 +761,7 @@ export default function AdminBarberoServiciosPage() {
         </div>
       ) : null}
 
-      {/* Modal Editar */}
+      {/* Modal Editar
       {modalEditarOpen && editItem ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/40" onClick={cerrarEditar} />
@@ -628,7 +786,7 @@ export default function AdminBarberoServiciosPage() {
 
             <div className="mt-5 space-y-4">
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
-                {(editItem.service?.name ?? "(servicio)") + " • " + editItem.serviceId}
+                {editItem.service?.name ?? "(servicio)"}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -644,7 +802,9 @@ export default function AdminBarberoServiciosPage() {
                     }`}
                     inputMode="numeric"
                   />
-                  {editarPriceError ? <p className="text-xs text-red-600">{editarPriceError}</p> : null}
+                  {editarPriceError ? (
+                    <p className="text-xs text-red-600">{editarPriceError}</p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-1">
@@ -655,11 +815,15 @@ export default function AdminBarberoServiciosPage() {
                     onBlur={() => setTouchedEditar((p) => ({ ...p, durationMin: true }))}
                     disabled={Boolean(accionId)}
                     className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-black outline-none ${
-                      editarDurationError ? "border-red-400" : "border-neutral-300 focus:border-black"
+                      editarDurationError
+                        ? "border-red-400"
+                        : "border-neutral-300 focus:border-black"
                     }`}
                     inputMode="numeric"
                   />
-                  {editarDurationError ? <p className="text-xs text-red-600">{editarDurationError}</p> : null}
+                  {editarDurationError ? (
+                    <p className="text-xs text-red-600">{editarDurationError}</p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -674,7 +838,7 @@ export default function AdminBarberoServiciosPage() {
               </button>
 
               <button
-                onClick={() => void confirmarEditar()}
+                onClick={pedirEditar}
                 disabled={!canEditar || Boolean(accionId)}
                 className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
@@ -683,39 +847,79 @@ export default function AdminBarberoServiciosPage() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : null} */}
 
-      {/* Confirm toggle */}
-      {confirm.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40" onClick={cancelarToggle} />
+      <ConfirmDialog
+        open={asignarConfirmOpen}
+        title="Asignar servicio"
+        message="¿Seguro que quieres asignar este servicio al barbero?"
+        confirmText={accionId === "__assign__" ? "Asignando..." : "Sí, asignar"}
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void confirmarAsignar()}
+        onClose={() => {
+          if (accionId === "__assign__") return;
+          setAsignarConfirmOpen(false);
+        }}
+      />
 
-          <div className="relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-black">Confirmación</h3>
-            <p className="mt-2 text-sm text-neutral-700">
-              ¿Seguro que quieres {confirm.nextActive ? "activar" : "desactivar"} este servicio para el barbero?
-            </p>
+      {/* <ConfirmDialog
+        open={editarConfirmOpen}
+        title="Guardar cambios"
+        message={
+          editItem
+            ? `¿Seguro que quieres guardar los cambios del servicio "${
+                editItem.service?.name ?? "(servicio)"
+              }"?`
+            : ""
+        }
+        confirmText={accionId === editItem?.id ? "Guardando..." : "Sí, guardar"}
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void confirmarEditar()}
+        onClose={() => {
+          if (accionId === editItem?.id) return;
+          setEditarConfirmOpen(false);
+        }}
+      /> */}
 
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                onClick={cancelarToggle}
-                disabled={Boolean(accionId)}
-                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
+      <ConfirmDialog
+        open={Boolean(toggleTarget)}
+        title={toggleTarget?.nextActive ? "Activar servicio" : "Desactivar servicio"}
+        message={
+          toggleTarget
+            ? toggleTarget.nextActive
+              ? `¿Seguro que quieres activar el servicio "${toggleTarget.name}" para este barbero?`
+              : `¿Seguro que quieres desactivar el servicio "${toggleTarget.name}" para este barbero?`
+            : ""
+        }
+        confirmText={
+          accionId === toggleTarget?.id
+            ? toggleTarget?.nextActive
+              ? "Activando..."
+              : "Desactivando..."
+            : toggleTarget?.nextActive
+              ? "Sí, activar"
+              : "Sí, desactivar"
+        }
+        cancelText="Volver"
+        variant={toggleTarget?.nextActive ? "default" : "danger"}
+        onConfirm={() => void confirmarToggle()}
+        onClose={cancelarToggle}
+      />
 
-              <button
-                onClick={() => void confirmarToggle()}
-                disabled={Boolean(accionId)}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {accionId ? "Procesando..." : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

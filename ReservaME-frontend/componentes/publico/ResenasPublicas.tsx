@@ -27,7 +27,7 @@ export default function ResenasPublicas({
   return (
     <section className="mt-0">
       <div className="flex items-end justify-between gap-4">
-        <h2 className="text-lg font-semibold text-white">{titulo}</h2>
+        <h2 className="text-2xl font-semibold text-white">{titulo}</h2>
 
         {resenas.length > 0 ? (
           <div className="shrink-0 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white shadow-sm backdrop-blur-sm">
@@ -41,41 +41,43 @@ export default function ResenasPublicas({
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        {resenas.length === 0 ? (
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
-            Aún no hay reseñas para este profesional.
-          </div>
-        ) : (
-          resenas.map((r) => (
-            <div key={r.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-black">
-                    {inicialCliente(r.reservation.clientName)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-neutral-500">
-                    {r.reservation.service?.name ?? "Servicio"}
-                  </p>
+      <div className="mt-4 h-[340px] overflow-y-auto pr-2 [scrollbar-width:thin]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {resenas.length === 0 ? (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600 md:col-span-2">
+              Aún no hay reseñas para este profesional.
+            </div>
+          ) : (
+            resenas.map((r) => (
+              <div key={r.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-black">
+                      {inicialCliente(r.reservation.clientName)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral-500">
+                      {r.reservation.service?.name ?? "Servicio"}
+                    </p>
+                  </div>
+
+                  <span className="shrink-0 rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-semibold text-yellow-700 shadow-sm">
+                    {estrellas(r.rating)}
+                  </span>
                 </div>
 
-                <span className="shrink-0 rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-semibold text-yellow-700 shadow-sm">
-                  {estrellas(r.rating)}
-                </span>
+                {r.comment ? (
+                  <p className="mt-3 text-sm text-neutral-700">{r.comment}</p>
+                ) : (
+                  <p className="mt-3 text-sm text-neutral-400">Sin comentario</p>
+                )}
+
+                <p className="mt-3 text-xs text-neutral-500">
+                  {new Date(r.createdAt).toLocaleDateString("es-CL")}
+                </p>
               </div>
-
-              {r.comment ? (
-                <p className="mt-3 text-sm text-neutral-700">{r.comment}</p>
-              ) : (
-                <p className="mt-3 text-sm text-neutral-400">Sin comentario</p>
-              )}
-
-              <p className="mt-3 text-xs text-neutral-500">
-                {new Date(r.createdAt).toLocaleDateString("es-CL")}
-              </p>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     </section>
   );

@@ -461,7 +461,7 @@ export class ReservasService {
     endAt: Date,
     excludeReservationId: string,
   ) {
-    const conflicto = await this.prisma.reservation.findFirst({
+    const conflictoReserva = await this.prisma.reservation.findFirst({
       where: {
         tenantId,
         barberId,
@@ -473,9 +473,26 @@ export class ReservasService {
       select: { id: true },
     });
 
-    if (conflicto) {
+    if (conflictoReserva) {
       throw new BadRequestException(
         'Existe un solapamiento con otra reserva en ese horario.',
+      );
+    }
+
+    const conflictoBloqueo = await this.prisma.barberTimeBlock.findFirst({
+      where: {
+        tenantId,
+        barberId,
+        isActive: true,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+      select: { id: true },
+    });
+
+    if (conflictoBloqueo) {
+      throw new BadRequestException(
+        'El horario seleccionado se encuentra bloqueado. Por favor, elige otro horario.',
       );
     }
   }

@@ -8,28 +8,28 @@ datasource db {
 }
 
 model Tenant {
-  id              String                 @id @default(uuid())
-  name            String
-  domain          String?                @unique
-  email           String?
-  address         String?
-  isActive        Boolean                @default(true) @map("is_active")
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
-  instagramUrl    String?                @map("instagram_url")
-  appSetting      AppSetting?
-  barberServices  BarberService[]
-  weeklySchedules BarberWeeklySchedule[]
+  id               String                 @id @default(uuid())
+  name             String
+  domain           String?                @unique
+  email            String?
+  address          String?
+  isActive         Boolean                @default(true) @map("is_active")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  instagramUrl     String?                @map("instagram_url")
+  appSetting       AppSetting?
+  barberServices   BarberService[]
+  weeklySchedules  BarberWeeklySchedule[]
   barberTimeBlocks BarberTimeBlock[]
-  barbers         Barber[]
-  portfolioImages PortfolioImage[]
-  productos       Producto[]
-  reservations    Reservation[]
-  reviews         Review[]
-  services        Service[]
-  settings        TenantSettings?
-  tokens          Token[]
-  users           User[]
+  barbers          Barber[]
+  portfolioImages  PortfolioImage[]
+  productos        Producto[]
+  reservations     Reservation[]
+  reviews          Review[]
+  services         Service[]
+  settings         TenantSettings?
+  tokens           Token[]
+  users            User[]
 
   @@map("tenants")
 }
@@ -256,21 +256,21 @@ model BarberWeeklySchedule {
 }
 
 model BarberTimeBlock {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  barberId  String   @map("barber_id")
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  barberId String @map("barber_id")
 
-  startAt   DateTime @map("start_at")
-  endAt     DateTime @map("end_at")
+  startAt DateTime @map("start_at")
+  endAt   DateTime @map("end_at")
 
-  reason    String?
-  isActive  Boolean  @default(true) @map("is_active")
+  reason   String?
+  isActive Boolean @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  barber    Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, barberId, startAt])
   @@index([tenantId])

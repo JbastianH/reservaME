@@ -8,6 +8,7 @@ import type { ApiError } from "@/lib/api";
 import { obtenerTenantPublico } from "@/services/tenant-publico.service";
 import type { TenantPublico } from "@/services/tenant-publico.service";
 import { obtenerVariableFuente } from "@/lib/fuentes-css";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 type Props = {
   initialTenant?: TenantPublico | null;
@@ -22,8 +23,13 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
   const [email, setEmail] = useState("");
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorGlobal, setErrorGlobal] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   useEffect(() => {
     if (initialTenant) return;
@@ -60,29 +66,64 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
   }, [email, touched]);
 
   const canSubmit = !loading && !emailError && email.trim();
-
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
   async function handleSubmit() {
     setTouched(true);
-    setErrorGlobal("");
-    setSuccessMsg("");
 
-    if (!email.trim()) return;
-    if (emailError) return;
+    const emailValue = email.trim();
+
+    if (!emailValue) {
+      mostrarFeedback({
+        title: "Correo obligatorio",
+        message: "Ingresa tu correo electrónico para recuperar el acceso.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(emailValue)) {
+      mostrarFeedback({
+        title: "Correo inválido",
+        message: "Ingresa un correo con formato válido.",
+        variant: "error",
+      });
+      return;
+    }
 
     try {
       setLoading(true);
 
-      const res = (await solicitarRecuperacion(email.trim())) as {
+      const res = (await solicitarRecuperacion(emailValue)) as {
         mensaje?: string;
       };
 
-      setSuccessMsg(res.mensaje || "Si el correo existe, recibirás instrucciones.");
+      mostrarFeedback({
+        title: "Solicitud enviada",
+        message: res.mensaje || "Si el correo existe, recibirás instrucciones.",
+        variant: "success",
+      });
 
       setEmail("");
       setTouched(false);
     } catch (err) {
       const e = err as Partial<ApiError>;
-      setErrorGlobal(e.message ?? "Ocurrió un error inesperado.");
+
+      mostrarFeedback({
+        title: "No se pudo enviar",
+        message: e.message ?? "Ocurrió un error inesperado.",
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -112,8 +153,7 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
     <main
       className="relative flex min-h-[calc(100vh-8rem)] items-center justify-center overflow-hidden px-4 py-10 sm:px-6"
       style={{
-        backgroundColor,
-        fontFamily,
+        backgroundColor
       }}
     >
       <div
@@ -138,7 +178,7 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
         <div className="mb-8">
           <p
             className="mb-2 text-xs font-semibold tracking-[0.35em] uppercase"
-            style={{ color: secondaryColor }}
+            style={{ color: secondaryColor, fontFamily }}
           >
             Recuperación de acceso
           </p>
@@ -149,18 +189,6 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
             Ingresa tu correo para recibir un enlace de recuperación.
           </p>
         </div>
-
-        {errorGlobal ? (
-          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {errorGlobal}
-          </div>
-        ) : null}
-
-        {successMsg ? (
-          <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-            {successMsg}
-          </div>
-        ) : null}
 
         <div
           className="rounded-[1.5rem] border bg-white/10 p-5 shadow-xl backdrop-blur-sm"
@@ -214,6 +242,19 @@ export default function ForgotPasswordClient({ initialTenant = null }: Props) {
           </form>
         </div>
       </div>
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </main>
   );
 }

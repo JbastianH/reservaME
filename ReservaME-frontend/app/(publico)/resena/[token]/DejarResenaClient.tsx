@@ -4,6 +4,7 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { crearResenaConToken, obtenerResenaPorToken } from "@/services/resenas-publicas.service";
 import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
 
 function isExpired(expiresAt: string) {
   return new Date(expiresAt).getTime() <= Date.now();
@@ -67,15 +68,35 @@ export default function DejarResenaClient({
 
   const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState("");
-
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
 
   useEffect(() => {
     if (!token || token === "undefined") {
       setLoading(false);
-      setErr("Enlace de reseña inválido.");
+      setLoadError("Enlace de reseña inválido.");
       return;
     }
 
@@ -83,8 +104,8 @@ export default function DejarResenaClient({
 
     async function cargarResena() {
       setLoading(true);
-      setErr("");
-      setOk("");
+      setLoadError("");
+      setSubmitted(false);
 
       try {
         const r = await obtenerResenaPorToken(token);
@@ -95,7 +116,7 @@ export default function DejarResenaClient({
       } catch (e) {
         if (!alive) return;
 
-        setErr(obtenerMensajeError(e, "No se pudo cargar el enlace de reseña."));
+        setLoadError(obtenerMensajeError(e, "No se pudo cargar el enlace de reseña."));
       } finally {
         if (!alive) return;
 
@@ -127,19 +148,31 @@ export default function DejarResenaClient({
     if (busy) return false;
     if (expired) return false;
     if (used) return false;
-    if (ok) return false;
+    if (submitted) return false;
     if (rating < 1 || rating > 5) return false;
 
     return true;
-  }, [data, busy, expired, used, rating, ok]);
+  }, [data, busy, expired, used, rating, submitted]);
 
+  function pedirEnviar() {
+    if (!canSubmit) {
+      mostrarFeedback({
+        title: "No se puede enviar",
+        message:
+          "Este enlace no permite enviar la reseña. Puede haber expirado o ya fue utilizado.",
+        variant: "error",
+      });
+
+      return;
+    }
+
+    setConfirmOpen(true);
+  }
   async function enviar() {
-    setErr("");
-    setOk("");
-
     if (!canSubmit) return;
 
     try {
+      setConfirmOpen(false);
       setBusy(true);
 
       const resp = await crearResenaConToken(token, {
@@ -147,9 +180,19 @@ export default function DejarResenaClient({
         comment: comment.trim() ? comment.trim() : undefined,
       });
 
-      setOk(resp.mensaje ?? "¡Gracias! Tu reseña fue registrada correctamente.");
+      setSubmitted(true);
+
+      mostrarFeedback({
+        title: "Reseña enviada",
+        message: resp.mensaje ?? "¡Gracias! Tu reseña fue registrada correctamente.",
+        variant: "success",
+      });
     } catch (e) {
-      setErr(obtenerMensajeError(e, "No se pudo enviar la reseña."));
+      mostrarFeedback({
+        title: "No se pudo enviar",
+        message: obtenerMensajeError(e, "No se pudo enviar la reseña."),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -166,10 +209,10 @@ export default function DejarResenaClient({
     );
   }
 
-  if (err && !data) {
+  if (loadError && !data) {
     return (
       <div className="rounded-[2rem] border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-100 shadow-2xl backdrop-blur-sm">
-        {err}
+        {loadError}
       </div>
     );
   }
@@ -178,14 +221,6 @@ export default function DejarResenaClient({
 
   return (
     <section className="space-y-6 font-sans">
-      <FeedbackDialog
-        open={Boolean(ok)}
-        title="Reseña enviada"
-        message={ok}
-        variant="success"
-        onClose={() => setOk("")}
-      />
-
       <div>
         <p
           className="text-xs font-semibold tracking-[0.35em] uppercase"
@@ -232,12 +267,6 @@ export default function DejarResenaClient({
           </div>
         </div>
       </div>
-
-      {err ? (
-        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">
-          {err}
-        </div>
-      ) : null}
 
       {expired || used ? (
         <div
@@ -292,7 +321,7 @@ export default function DejarResenaClient({
         <div className="mt-6 flex justify-end">
           <button
             type="button"
-            onClick={() => void enviar()}
+            onClick={pedirEnviar}
             disabled={!canSubmit}
             className="rounded-xl px-5 py-3 text-sm font-semibold text-black transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
             style={{ backgroundColor: secondaryColor }}
@@ -301,6 +330,34 @@ export default function DejarResenaClient({
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Enviar reseña"
+        message={`¿Seguro que quieres enviar esta reseña con una calificación de ${rating}/5? Después de enviarla no podrás modificarla desde este enlace.`}
+        confirmText={busy ? "Enviando..." : "Sí, enviar"}
+        cancelText="Volver"
+        variant="default"
+        loading={busy}
+        onConfirm={() => void enviar()}
+        onClose={() => {
+          if (busy) return;
+          setConfirmOpen(false);
+        }}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

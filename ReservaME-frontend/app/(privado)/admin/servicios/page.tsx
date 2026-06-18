@@ -10,6 +10,9 @@ import {
   getAdminServicios,
 } from "@/services/servicios.service";
 
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+
 type ServicioItem = {
   id: string;
   nombre: string;
@@ -21,6 +24,12 @@ type ServicioItem = {
 type FormState = {
   nombre: string;
   descripcion: string;
+};
+
+type ToggleServicioTarget = {
+  id: string;
+  nombre: string;
+  nextActivo: boolean;
 };
 
 export default function AdminServiciosPage() {
@@ -41,16 +50,16 @@ export default function AdminServiciosPage() {
   const [form, setForm] = useState<FormState>({ nombre: "", descripcion: "" });
   const [touched, setTouched] = useState<{ nombre: boolean }>({ nombre: false });
 
-  // Confirmación activar/desactivar
-  const [confirm, setConfirm] = useState<{
-    open: boolean;
-    id: string | null;
-    nextActivo: boolean;
-  }>({ open: false, id: null, nextActivo: true });
+  const [loadError, setLoadError] = useState("");
 
-  // Mensajes UI
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
+  const [toggleTarget, setToggleTarget] = useState<ToggleServicioTarget | null>(null);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   function mapearError(err: unknown): string {
     const e = err as Partial<ApiError> | undefined;
@@ -61,8 +70,11 @@ export default function AdminServiciosPage() {
 
   async function refetchServicios() {
     setLoading(true);
+    setLoadError("");
+
     try {
       const res = await getAdminServicios();
+
       const mapped: ServicioItem[] = res.map((s) => ({
         id: s.id,
         nombre: s.name,
@@ -70,9 +82,10 @@ export default function AdminServiciosPage() {
         activo: s.isActive,
         createdAt: s.createdAt,
       }));
+
       setServicios(mapped);
     } catch (err) {
-      setBannerError(mapearError(err));
+      setLoadError(mapearError(err));
     } finally {
       setLoading(false);
     }
@@ -110,13 +123,20 @@ export default function AdminServiciosPage() {
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [servicios, q, estado]);
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
   function abrirCrear() {
-    resetBanners();
     setEditId(null);
     setForm({ nombre: "", descripcion: "" });
     setTouched({ nombre: false });
@@ -124,7 +144,6 @@ export default function AdminServiciosPage() {
   }
 
   function abrirEditar(item: ServicioItem) {
-    resetBanners();
     setEditId(item.id);
     setForm({ nombre: item.nombre, descripcion: item.descripcion ?? "" });
     setTouched({ nombre: false });
@@ -138,25 +157,31 @@ export default function AdminServiciosPage() {
   }
 
   async function guardar() {
-    resetBanners();
     setTouched({ nombre: true });
 
     if (!canSave) {
-      setBannerError("Revisa los campos marcados.");
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de guardar.",
+        variant: "error",
+      });
       return;
     }
 
     const payloadNombre = form.nombre.trim();
     const payloadDesc = form.descripcion.trim();
 
-    // Validación local de nombre duplicado (case-insensitive), ignorando el actual si edita
     const existe = servicios.some(
       (s) =>
-        s.nombre.toLowerCase() === payloadNombre.toLowerCase() &&
-        (editId ? s.id !== editId : true),
+        s.nombre.toLowerCase() === payloadNombre.toLowerCase() && (editId ? s.id !== editId : true),
     );
+
     if (existe) {
-      setBannerError("Ya existe un servicio con ese nombre.");
+      mostrarFeedback({
+        title: "Servicio duplicado",
+        message: "Ya existe un servicio con ese nombre.",
+        variant: "error",
+      });
       return;
     }
 
@@ -169,8 +194,14 @@ export default function AdminServiciosPage() {
           description: payloadDesc ? payloadDesc : null,
         });
 
-        setBannerOk("Servicio creado ✔︎");
         setModalOpen(false);
+
+        mostrarFeedback({
+          title: "Servicio creado",
+          message: "El servicio fue creado correctamente.",
+          variant: "success",
+        });
+
         await refetchServicios();
         return;
       }
@@ -180,42 +211,71 @@ export default function AdminServiciosPage() {
         description: payloadDesc ? payloadDesc : null,
       });
 
-      setBannerOk("Servicio actualizado ✔︎");
       setModalOpen(false);
+
+      mostrarFeedback({
+        title: "Servicio actualizado",
+        message: "Los cambios del servicio fueron guardados correctamente.",
+        variant: "success",
+      });
+
       await refetchServicios();
     } catch (err) {
-      setBannerError(mapearError(err));
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: mapearError(err),
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
   function pedirToggle(item: ServicioItem) {
-    resetBanners();
-    setConfirm({ open: true, id: item.id, nextActivo: !item.activo });
-  }
-
-  async function confirmarToggle() {
-    if (!confirm.id) return;
-
-    try {
-      setAccionId(confirm.id);
-
-      if (confirm.nextActivo) await activarServicioAdmin(confirm.id);
-      else await desactivarServicioAdmin(confirm.id);
-
-      setBannerOk(confirm.nextActivo ? "Servicio activado ✔︎" : "Servicio desactivado ✔︎");
-      setConfirm({ open: false, id: null, nextActivo: true });
-      await refetchServicios();
-    } catch (err) {
-      setBannerError(mapearError(err));
-    } finally {
-      setAccionId(null);
-    }
+    setToggleTarget({
+      id: item.id,
+      nombre: item.nombre,
+      nextActivo: !item.activo,
+    });
   }
 
   function cancelarToggle() {
-    setConfirm({ open: false, id: null, nextActivo: true });
+    if (accionId === toggleTarget?.id) return;
+    setToggleTarget(null);
+  }
+
+  async function confirmarToggle() {
+    if (!toggleTarget) return;
+
+    try {
+      setAccionId(toggleTarget.id);
+
+      if (toggleTarget.nextActivo) {
+        await activarServicioAdmin(toggleTarget.id);
+      } else {
+        await desactivarServicioAdmin(toggleTarget.id);
+      }
+
+      setToggleTarget(null);
+
+      mostrarFeedback({
+        title: toggleTarget.nextActivo ? "Servicio activado" : "Servicio desactivado",
+        message: toggleTarget.nextActivo
+          ? "El servicio volverá a estar disponible."
+          : "El servicio ya no estará disponible para nuevas asignaciones o reservas.",
+        variant: "success",
+      });
+
+      await refetchServicios();
+    } catch (err) {
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: mapearError(err),
+        variant: "error",
+      });
+    } finally {
+      setAccionId(null);
+    }
   }
 
   function pillActivo(activo: boolean) {
@@ -242,15 +302,9 @@ export default function AdminServiciosPage() {
       </div>
 
       {/* Banners */}
-      {bannerOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
-        </div>
-      ) : null}
-
-      {bannerError ? (
+      {loadError ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
+          {loadError}
         </div>
       ) : null}
 
@@ -271,7 +325,7 @@ export default function AdminServiciosPage() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Nombre o descripción..."
-                className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black placeholder:text-neutral-400 outline-none focus:border-black"
+                className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none placeholder:text-neutral-400 focus:border-black"
               />
             </div>
 
@@ -341,7 +395,12 @@ export default function AdminServiciosPage() {
                         <button
                           onClick={() => pedirToggle(s)}
                           disabled={accionId === s.id}
-                          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
+                          className={[
+                            "rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                            s.activo
+                              ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                              : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                          ].join(" ")}
                         >
                           {s.activo ? "Desactivar" : "Activar"}
                         </button>
@@ -392,7 +451,12 @@ export default function AdminServiciosPage() {
                   <button
                     onClick={() => pedirToggle(s)}
                     disabled={accionId === s.id}
-                    className="flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
+                    className={[
+                      "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                      s.activo
+                        ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                        : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                    ].join(" ")}
                   >
                     {s.activo ? "Desactivar" : "Activar"}
                   </button>
@@ -414,7 +478,9 @@ export default function AdminServiciosPage() {
                 <h2 className="text-lg font-semibold text-black">
                   {editId ? "Editar servicio" : "Crear servicio"}
                 </h2>
-                <p className="mt-1 text-sm text-neutral-600">Completa los datos y guarda los cambios.</p>
+                <p className="mt-1 text-sm text-neutral-600">
+                  Completa los datos y guarda los cambios.
+                </p>
               </div>
 
               <button
@@ -472,36 +538,43 @@ export default function AdminServiciosPage() {
         </div>
       ) : null}
 
-      {/* Confirmación activar/desactivar */}
-      {confirm.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40" onClick={cancelarToggle} />
+      <ConfirmDialog
+        open={Boolean(toggleTarget)}
+        title={toggleTarget?.nextActivo ? "Activar servicio" : "Desactivar servicio"}
+        message={
+          toggleTarget
+            ? toggleTarget.nextActivo
+              ? `¿Seguro que quieres activar el servicio "${toggleTarget.nombre}"?`
+              : `¿Seguro que quieres desactivar el servicio "${toggleTarget.nombre}"?`
+            : ""
+        }
+        confirmText={
+          accionId === toggleTarget?.id
+            ? toggleTarget?.nextActivo
+              ? "Activando..."
+              : "Desactivando..."
+            : toggleTarget?.nextActivo
+              ? "Sí, activar"
+              : "Sí, desactivar"
+        }
+        cancelText="Volver"
+        variant={toggleTarget?.nextActivo ? "default" : "danger"}
+        onConfirm={() => void confirmarToggle()}
+        onClose={cancelarToggle}
+      />
 
-          <div className="relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-black">Confirmación</h3>
-            <p className="mt-2 text-sm text-neutral-700">
-              ¿Seguro que quieres {confirm.nextActivo ? "activar" : "desactivar"} este servicio?
-            </p>
-
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                onClick={cancelarToggle}
-                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm text-black hover:bg-neutral-50"
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={() => void confirmarToggle()}
-                disabled={accionId === confirm.id}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

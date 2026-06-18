@@ -7,7 +7,7 @@ import {
   type DayOfWeek,
   type HorarioBarberoItem,
 } from "@/services/horario-barbero.service";
-
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 const DIAS: Array<{ key: DayOfWeek; label: string }> = [
   { key: "MON", label: "Lunes" },
   { key: "TUE", label: "Martes" },
@@ -71,12 +71,28 @@ export default function HorarioBarberoPanel() {
   const [saving, setSaving] = useState(false);
 
   const [rows, setRows] = useState<Row[]>([]);
-  const [ok, setOk] = useState("");
   const [err, setErr] = useState("");
 
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
   async function cargar() {
     setErr("");
-    setOk("");
     setLoading(true);
     try {
       const r = await getHorarioBarbero();
@@ -102,14 +118,19 @@ export default function HorarioBarberoPanel() {
 
   async function guardar() {
     setErr("");
-    setOk("");
 
     if (invalid) {
-      setErr("Hay días con rango inválido (inicio debe ser menor que fin).");
+      mostrarFeedback({
+        title: "Horario inválido",
+        message:
+          "Hay días con rango inválido. La hora de inicio debe ser menor que la hora de fin.",
+        variant: "error",
+      });
       return;
     }
 
     setSaving(true);
+
     try {
       await patchHorarioBarbero(
         rows.map((r) => ({
@@ -119,10 +140,20 @@ export default function HorarioBarberoPanel() {
           endMin: r.isClosed ? undefined : r.endMin,
         })),
       );
-      setOk("Horario actualizado ✔︎");
+
+      mostrarFeedback({
+        title: "Horario guardado",
+        message: "Tu horario de atención fue actualizado correctamente.",
+        variant: "success",
+      });
+
       await cargar();
     } catch (e: any) {
-      setErr(e?.message ? String(e.message) : "No se pudo guardar el horario.");
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: e?.message ? String(e.message) : "No se pudo guardar el horario.",
+        variant: "error",
+      });
     } finally {
       setSaving(false);
     }
@@ -150,12 +181,6 @@ export default function HorarioBarberoPanel() {
       {err ? (
         <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
           {err}
-        </div>
-      ) : null}
-
-      {ok ? (
-        <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
-          {ok}
         </div>
       ) : null}
 
@@ -190,9 +215,7 @@ export default function HorarioBarberoPanel() {
                           onChange={(e) => {
                             const v = e.target.checked;
                             setRows((prev) =>
-                              prev.map((x) =>
-                                x.day === r.day ? { ...x, isClosed: v } : x,
-                              ),
+                              prev.map((x) => (x.day === r.day ? { ...x, isClosed: v } : x)),
                             );
                           }}
                         />
@@ -208,9 +231,7 @@ export default function HorarioBarberoPanel() {
                         onChange={(e) => {
                           const v = Number(e.target.value);
                           setRows((prev) =>
-                            prev.map((x) =>
-                              x.day === r.day ? { ...x, startMin: v } : x,
-                            ),
+                            prev.map((x) => (x.day === r.day ? { ...x, startMin: v } : x)),
                           );
                         }}
                         className="rounded-lg border border-neutral-300 bg-white px-2 py-2 text-sm text-black outline-none focus:border-black disabled:opacity-50"
@@ -229,9 +250,7 @@ export default function HorarioBarberoPanel() {
                         onChange={(e) => {
                           const v = Number(e.target.value);
                           setRows((prev) =>
-                            prev.map((x) =>
-                              x.day === r.day ? { ...x, endMin: v } : x,
-                            ),
+                            prev.map((x) => (x.day === r.day ? { ...x, endMin: v } : x)),
                           );
                         }}
                         className="rounded-lg border border-neutral-300 bg-white px-2 py-2 text-sm text-black outline-none focus:border-black disabled:opacity-50"
@@ -244,7 +263,9 @@ export default function HorarioBarberoPanel() {
                       </select>
 
                       <span className="ml-2 text-xs text-neutral-500">
-                        {r.isClosed ? "Cerrado" : `${minToHHmm(r.startMin)} - ${minToHHmm(r.endMin)}`}
+                        {r.isClosed
+                          ? "Cerrado"
+                          : `${minToHHmm(r.startMin)} - ${minToHHmm(r.endMin)}`}
                       </span>
                     </div>
                   </div>
@@ -274,6 +295,19 @@ export default function HorarioBarberoPanel() {
           </div>
         </>
       )}
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

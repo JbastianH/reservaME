@@ -7,6 +7,7 @@ import { resetPassword } from "@/services/auth.service";
 import { obtenerTenantPublico } from "@/services/tenant-publico.service";
 import type { TenantPublico } from "@/services/tenant-publico.service";
 import { obtenerVariableFuente } from "@/lib/fuentes-css";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 type Props = {
   initialTenant?: TenantPublico | null;
@@ -45,8 +46,14 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
   });
 
   const [loading, setLoading] = useState(false);
-  const [errorGlobal, setErrorGlobal] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [passwordChanged, setPasswordChanged] = useState(false);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   useEffect(() => {
     if (initialTenant) return;
@@ -92,11 +99,25 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
 
   const canSubmit =
     !loading &&
+    !passwordChanged &&
     Boolean(token) &&
     !passwordError &&
     !confirmError &&
     form.password &&
     form.confirmPassword;
+
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
 
   async function handleSubmit() {
     setTouched({
@@ -104,16 +125,50 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
       confirmPassword: true,
     });
 
-    setErrorGlobal("");
-    setSuccessMsg("");
-
     if (!token) {
-      setErrorGlobal("El enlace de recuperación no es válido.");
+      mostrarFeedback({
+        title: "Enlace inválido",
+        message: "El enlace de recuperación no es válido.",
+        variant: "error",
+      });
       return;
     }
 
-    if (!form.password || !form.confirmPassword) return;
-    if (passwordError || confirmError) return;
+    if (!form.password) {
+      mostrarFeedback({
+        title: "Contraseña obligatoria",
+        message: "Ingresa una nueva contraseña.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (!form.confirmPassword) {
+      mostrarFeedback({
+        title: "Confirmación obligatoria",
+        message: "Debes confirmar la nueva contraseña.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (form.password.length < 8) {
+      mostrarFeedback({
+        title: "Contraseña muy corta",
+        message: "La contraseña debe tener al menos 8 caracteres.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      mostrarFeedback({
+        title: "Contraseñas distintas",
+        message: "Las contraseñas no coinciden.",
+        variant: "error",
+      });
+      return;
+    }
 
     try {
       setLoading(true);
@@ -123,7 +178,13 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
         password: form.password,
       });
 
-      setSuccessMsg("Contraseña actualizada con éxito.");
+      setPasswordChanged(true);
+
+      mostrarFeedback({
+        title: "Contraseña actualizada",
+        message: "Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.",
+        variant: "success",
+      });
 
       setForm({
         password: "",
@@ -135,7 +196,11 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
         confirmPassword: false,
       });
     } catch (err) {
-      setErrorGlobal(obtenerMensajeError(err));
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: obtenerMensajeError(err),
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -166,7 +231,6 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
       className="relative flex min-h-[calc(100vh-8rem)] items-center justify-center overflow-hidden px-4 py-10 sm:px-6"
       style={{
         backgroundColor,
-        fontFamily,
       }}
     >
       <div
@@ -191,7 +255,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
         <div className="mb-8">
           <p
             className="mb-2 text-xs font-semibold tracking-[0.35em] uppercase"
-            style={{ color: secondaryColor }}
+            style={{ color: secondaryColor, fontFamily }}
           >
             Recuperación de acceso
           </p>
@@ -200,18 +264,6 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
 
           <p className="mt-2 text-sm text-white/60">Elige tu nueva clave de acceso.</p>
         </div>
-
-        {errorGlobal ? (
-          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {errorGlobal}
-          </div>
-        ) : null}
-
-        {successMsg ? (
-          <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-            {successMsg}
-          </div>
-        ) : null}
 
         <div
           className="rounded-[1.5rem] border bg-white/10 p-5 shadow-xl backdrop-blur-sm"
@@ -247,7 +299,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
                   passwordError ? "border-red-500" : "border-white/10"
                 }`}
                 autoComplete="new-password"
-                disabled={loading || Boolean(successMsg)}
+                disabled={loading || passwordChanged}
               />
 
               {passwordError ? <p className="text-xs text-red-300">{passwordError}</p> : null}
@@ -276,7 +328,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
                   confirmError ? "border-red-500" : "border-white/10"
                 }`}
                 autoComplete="new-password"
-                disabled={loading || Boolean(successMsg)}
+                disabled={loading || passwordChanged}
               />
 
               {confirmError ? <p className="text-xs text-red-300">{confirmError}</p> : null}
@@ -284,7 +336,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
 
             <button
               type="submit"
-              disabled={!canSubmit || Boolean(successMsg)}
+              disabled={!canSubmit || passwordChanged}
               className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-black transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
               style={{
                 backgroundColor: secondaryColor,
@@ -293,7 +345,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
               {loading ? "Actualizando..." : "Cambiar contraseña"}
             </button>
 
-            {successMsg ? (
+            {passwordChanged ? (
               <button
                 type="button"
                 onClick={() => router.replace("/login")}
@@ -306,7 +358,7 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
               </button>
             ) : null}
 
-            {!successMsg ? (
+            {!passwordChanged ? (
               <button
                 type="button"
                 onClick={() => router.push("/login")}
@@ -318,6 +370,18 @@ export default function ResetPasswordClient({ initialTenant = null }: Props) {
           </form>
         </div>
       </div>
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </main>
   );
 }

@@ -645,7 +645,6 @@ function SuperAdminPanel() {
         open={feedbackDialog.open}
         title={feedbackDialog.title}
         message={feedbackDialog.message}
-        variant={feedbackDialog.variant}
         onClose={() => setFeedbackDialog((prev) => ({ ...prev, open: false }))}
       />
     </main>

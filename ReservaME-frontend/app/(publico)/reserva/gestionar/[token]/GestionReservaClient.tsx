@@ -16,6 +16,7 @@ import {
 
 import PoliticaCancelacion from "@/componentes/publico/PoliticaCancelacion";
 import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 function todayISODate() {
   const d = new Date();
@@ -96,18 +97,35 @@ export default function GestionReservaClient({
   const [politicaAceptada, setPoliticaAceptada] = useState(false);
 
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   const [finalAction, setFinalAction] = useState<SuccessAction>(null);
 
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      setErr("");
-      setOk("");
+      setLoadError("");
       setFinalAction(null);
 
       try {
@@ -121,7 +139,7 @@ export default function GestionReservaClient({
 
         setDate(`${yyyy}-${mm}-${dd}`);
       } catch (e) {
-        setErr(obtenerMensajeError(e, "No se pudo cargar la gestión de la reserva."));
+        setLoadError(obtenerMensajeError(e, "No se pudo cargar la gestión de la reserva."));
       } finally {
         setLoading(false);
       }
@@ -136,8 +154,6 @@ export default function GestionReservaClient({
 
     async function loadSlots() {
       setLoadingSlots(true);
-      setErr("");
-      setOk("");
       setDisp(null);
       setSlot("");
 
@@ -149,7 +165,11 @@ export default function GestionReservaClient({
 
         setDisp(r);
       } catch (e) {
-        setErr(obtenerMensajeError(e, "No se pudo cargar disponibilidad."));
+        mostrarFeedback({
+          title: "No se pudo cargar disponibilidad",
+          message: obtenerMensajeError(e, "No se pudo cargar disponibilidad."),
+          variant: "error",
+        });
       } finally {
         setLoadingSlots(false);
       }
@@ -195,13 +215,13 @@ export default function GestionReservaClient({
   }, [data, busy, isExpired, isUsed, finalAction]);
 
   async function doCancelar() {
-    setErr("");
-    setOk("");
-
     if (!canAct) {
-      setErr(
-        "Este enlace no permite cancelar. Puede haber expirado, ya fue utilizado o la reserva ya no está confirmada.",
-      );
+      mostrarFeedback({
+        title: "No se puede cancelar",
+        message:
+          "Este enlace no permite cancelar. Puede haber expirado, ya fue utilizado o la reserva ya no está confirmada.",
+        variant: "error",
+      });
       return;
     }
 
@@ -211,32 +231,49 @@ export default function GestionReservaClient({
       const r = await cancelarGestionReserva(token);
 
       setFinalAction({ type: "CANCELADA" });
-      setOk(r.mensaje ?? "Reserva cancelada correctamente.");
+
+      mostrarFeedback({
+        title: "Reserva cancelada",
+        message: r.mensaje ?? "Reserva cancelada correctamente.",
+        variant: "success",
+      });
     } catch (e) {
-      setErr(obtenerMensajeError(e, "No se pudo cancelar."));
+      mostrarFeedback({
+        title: "No se pudo cancelar",
+        message: obtenerMensajeError(e, "No se pudo cancelar."),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
   }
 
   async function doReprogramar(dateStr: string, slotStr: string) {
-    setErr("");
-    setOk("");
-
     if (!canAct) {
-      setErr(
-        "Este enlace no permite reprogramar. Puede haber expirado, ya fue utilizado o la reserva ya no está confirmada.",
-      );
+      mostrarFeedback({
+        title: "No se puede reprogramar",
+        message:
+          "Este enlace no permite reprogramar. Puede haber expirado, ya fue utilizado o la reserva ya no está confirmada.",
+        variant: "error",
+      });
       return;
     }
 
     if (!slotStr) {
-      setErr("Selecciona una hora.");
+      mostrarFeedback({
+        title: "Selecciona una hora",
+        message: "Debes seleccionar una hora disponible para reprogramar.",
+        variant: "error",
+      });
       return;
     }
 
     if (!politicaAceptada) {
-      setErr("Debes aceptar la política de cancelación.");
+      mostrarFeedback({
+        title: "Política requerida",
+        message: "Debes aceptar la política de cancelación.",
+        variant: "error",
+      });
       return;
     }
 
@@ -252,7 +289,11 @@ export default function GestionReservaClient({
         startAt: startAtISO,
       });
 
-      setOk(r.mensaje ?? "Reserva reprogramada correctamente.");
+      mostrarFeedback({
+        title: "Reserva reprogramada",
+        message: r.mensaje ?? "Reserva reprogramada correctamente.",
+        variant: "success",
+      });
 
       setData((prev) => {
         if (!prev) return prev;
@@ -272,7 +313,11 @@ export default function GestionReservaClient({
         };
       });
     } catch (e) {
-      setErr(obtenerMensajeError(e, "No se pudo reprogramar."));
+      mostrarFeedback({
+        title: "No se pudo reprogramar",
+        message: obtenerMensajeError(e, "No se pudo reprogramar."),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -287,12 +332,20 @@ export default function GestionReservaClient({
 
   function openConfirmReprogramar() {
     if (!slot) {
-      setErr("Selecciona una hora antes de reprogramar.");
+      mostrarFeedback({
+        title: "Selecciona una hora",
+        message: "Selecciona una hora antes de reprogramar.",
+        variant: "error",
+      });
       return;
     }
 
     if (!politicaAceptada) {
-      setErr("Debes aceptar la política de cancelación para continuar.");
+      mostrarFeedback({
+        title: "Política requerida",
+        message: "Debes aceptar la política de cancelación para continuar.",
+        variant: "error",
+      });
       return;
     }
 
@@ -344,10 +397,10 @@ export default function GestionReservaClient({
     );
   }
 
-  if (err && !data) {
+  if (loadError && !data) {
     return (
       <div className="rounded-[2rem] border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-100 shadow-2xl backdrop-blur-sm">
-        {err}
+        {loadError}
       </div>
     );
   }
@@ -360,12 +413,36 @@ export default function GestionReservaClient({
         open={confirm.open}
         title={confirmTitle}
         message={confirmMessage}
-        confirmText="Confirmar"
+        confirmText={
+          busy
+            ? confirm.open && confirm.kind === "cancelar"
+              ? "Cancelando..."
+              : "Reprogramando..."
+            : confirm.open && confirm.kind === "cancelar"
+              ? "Sí, cancelar"
+              : "Sí, reprogramar"
+        }
         cancelText="Volver"
         loading={busy}
         variant={confirm.open && confirm.kind === "cancelar" ? "danger" : "default"}
         onConfirm={() => void onConfirmAction()}
-        onClose={() => setConfirm({ open: false })}
+        onClose={() => {
+          if (busy) return;
+          setConfirm({ open: false });
+        }}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
       />
 
       <div>
@@ -385,18 +462,6 @@ export default function GestionReservaClient({
           Desde aquí puedes cancelar o reprogramar tu reserva.
         </p>
       </div>
-
-      {err ? (
-        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">
-          {err}
-        </div>
-      ) : null}
-
-      {ok ? (
-        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-          {ok}
-        </div>
-      ) : null}
 
       {!finalAction && (isExpired || isUsed) ? (
         <div

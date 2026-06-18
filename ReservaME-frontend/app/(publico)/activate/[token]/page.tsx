@@ -48,8 +48,14 @@ export default function ActivarCuentaPage() {
   });
 
   const [loading, setLoading] = useState(false);
-  const [errorGlobal, setErrorGlobal] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   useEffect(() => {
     async function cargarTenant() {
@@ -108,14 +114,71 @@ export default function ActivarCuentaPage() {
     form.password &&
     form.confirmPassword;
 
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
+
   async function handleSubmit() {
     setTouched({
       password: true,
       confirmPassword: true,
     });
 
-    setErrorGlobal("");
     setSuccessMsg("");
+
+    if (tokenError) {
+      mostrarFeedback({
+        title: "Enlace inválido",
+        message: tokenError,
+        variant: "error",
+      });
+      return;
+    }
+
+    if (!form.password) {
+      mostrarFeedback({
+        title: "Contraseña obligatoria",
+        message: "Ingresa una contraseña para activar tu cuenta.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (form.password.length < 8) {
+      mostrarFeedback({
+        title: "Contraseña muy corta",
+        message: "La contraseña debe tener al menos 8 caracteres.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (!form.confirmPassword) {
+      mostrarFeedback({
+        title: "Confirmación obligatoria",
+        message: "Debes confirmar tu contraseña.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (form.confirmPassword !== form.password) {
+      mostrarFeedback({
+        title: "Contraseñas distintas",
+        message: "Las contraseñas no coinciden.",
+        variant: "error",
+      });
+      return;
+    }
 
     if (!canSubmit) return;
 
@@ -127,7 +190,9 @@ export default function ActivarCuentaPage() {
         password: form.password,
       });
 
-      setSuccessMsg(res.mensaje || "Cuenta activada correctamente.");
+      const mensaje = res.mensaje || "Cuenta activada correctamente.";
+
+      setSuccessMsg(mensaje);
 
       setForm({
         password: "",
@@ -139,7 +204,11 @@ export default function ActivarCuentaPage() {
         confirmPassword: false,
       });
     } catch (err) {
-      setErrorGlobal(mapearErrorActivacion(err));
+      mostrarFeedback({
+        title: "No se pudo activar",
+        message: mapearErrorActivacion(err),
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -210,12 +279,6 @@ export default function ActivarCuentaPage() {
         {tokenError ? (
           <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {tokenError}
-          </div>
-        ) : null}
-
-        {errorGlobal ? (
-          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {errorGlobal}
           </div>
         ) : null}
 
@@ -308,6 +371,19 @@ export default function ActivarCuentaPage() {
         message={successMsg}
         variant="success"
         onClose={() => router.replace("/login")}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
       />
     </main>
   );
