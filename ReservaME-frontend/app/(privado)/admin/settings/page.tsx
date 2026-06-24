@@ -8,6 +8,7 @@ import {
   type AdminTenantConfiguracion,
 } from "@/services/admin-tenant.service";
 import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
 import { FUENTES_TENANT, FUENTE_TENANT_DEFAULT } from "@/lib/fuentes-tenant";
 import { subirArchivoCloudinary } from "@/services/media.service";
 import { obtenerVariableFuente } from "@/lib/fuentes-css";
@@ -52,7 +53,7 @@ export default function AdminSettingsPage() {
 
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [subiendoHero, setSubiendoHero] = useState(false);
-
+  const [confirmGuardarTenantOpen, setConfirmGuardarTenantOpen] = useState(false);
   const [feedback, setFeedback] = useState<{
     open: boolean;
     title: string;
@@ -145,6 +146,21 @@ export default function AdminSettingsPage() {
     }
   }
 
+  function pedirGuardarTenant() {
+    if (tenantInvalid) {
+      setFeedback({
+        open: true,
+        title: "Faltan datos",
+        message: "El nombre de la barbería es obligatorio.",
+        variant: "error",
+      });
+
+      return;
+    }
+
+    setConfirmGuardarTenantOpen(true);
+  }
+
   async function onSaveTenant() {
     if (tenantInvalid) {
       setFeedback({
@@ -156,6 +172,7 @@ export default function AdminSettingsPage() {
       return;
     }
 
+    setConfirmGuardarTenantOpen(false);
     setSavingTenant(true);
     setTenantError("");
 
@@ -247,6 +264,23 @@ export default function AdminSettingsPage() {
             open: false,
           }))
         }
+      />
+
+      <ConfirmDialog
+        open={confirmGuardarTenantOpen}
+        title="Guardar configuración"
+        message={`¿Seguro que quieres guardar la configuración pública de "${
+          tenantForm.name.trim() || "la barbería"
+        }"? Los cambios de logo, colores, imagen principal y tipografía se verán reflejados en la web pública.`}
+        confirmText={savingTenant ? "Guardando..." : "Sí, guardar"}
+        cancelText="Volver"
+        variant="default"
+        loading={savingTenant}
+        onConfirm={() => void onSaveTenant()}
+        onClose={() => {
+          if (savingTenant) return;
+          setConfirmGuardarTenantOpen(false);
+        }}
       />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -486,7 +520,7 @@ export default function AdminSettingsPage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => void onSaveTenant()}
+                onClick={pedirGuardarTenant}
                 disabled={savingTenant || tenantInvalid}
                 className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
               >
