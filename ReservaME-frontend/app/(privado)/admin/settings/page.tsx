@@ -58,12 +58,12 @@ export default function AdminSettingsPage() {
     open: boolean;
     title: string;
     message: string;
-    variant: "success" | "error" | "info";
+    variant: "success" | "error";
   }>({
     open: false,
     title: "",
     message: "",
-    variant: "info",
+    variant: "success",
   });
 
   const fuentePreview = obtenerVariableFuente(tenantForm.fontFamily || FUENTE_TENANT_DEFAULT);
