@@ -19,8 +19,8 @@ model Tenant {
   instagramUrl     String?                @map("instagram_url")
   appSetting       AppSetting?
   barberServices   BarberService[]
-  weeklySchedules  BarberWeeklySchedule[]
   barberTimeBlocks BarberTimeBlock[]
+  weeklySchedules  BarberWeeklySchedule[]
   barbers          Barber[]
   portfolioImages  PortfolioImage[]
   productos        Producto[]
@@ -81,8 +81,8 @@ model Barber {
   createdAt       DateTime               @default(now()) @map("created_at")
   updatedAt       DateTime               @updatedAt @map("updated_at")
   services        BarberService[]
-  weeklySchedule  BarberWeeklySchedule[]
   timeBlocks      BarberTimeBlock[]
+  weeklySchedule  BarberWeeklySchedule[]
   tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user            User?                  @relation(fields: [userId], references: [id])
   portfolioImages PortfolioImage[]
@@ -256,21 +256,17 @@ model BarberWeeklySchedule {
 }
 
 model BarberTimeBlock {
-  id       String @id @default(uuid())
-  tenantId String @map("tenant_id")
-  barberId String @map("barber_id")
-
-  startAt DateTime @map("start_at")
-  endAt   DateTime @map("end_at")
-
-  reason   String?
-  isActive Boolean @default(true) @map("is_active")
-
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  barberId  String   @map("barber_id")
+  startAt   DateTime @map("start_at")
+  endAt     DateTime @map("end_at")
+  reason    String?
+  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  barber    Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, barberId, startAt])
   @@index([tenantId])
