@@ -6,6 +6,7 @@ import { patchBarberoMe } from "@/services/barbero-perfil.service";
 import PortafolioPanel from "@/componentes/barbero/PortafolioPanel";
 import { subirImagenCloudinary } from "@/lib/cloudinaryUpload";
 import HorarioBarberoPanel from "@/componentes/barbero/HorarioBarberoPanel";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 function isValidUrl(v: string) {
   if (!v.trim()) return true;
@@ -23,7 +24,7 @@ export default function BarberoPerfilPage() {
   const [form, setForm] = useState({
     bio: "",
     phone: "",
-    photoUrl: ""
+    photoUrl: "",
   });
 
   const [touched, setTouched] = useState({
@@ -33,10 +34,14 @@ export default function BarberoPerfilPage() {
   });
 
   const [busy, setBusy] = useState(false);
-  const [ok, setOk] = useState("");
-  const [err, setErr] = useState("");
   const [uploadingFoto, setUploadingFoto] = useState(false);
 
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,13 +65,28 @@ export default function BarberoPerfilPage() {
     return !photoUrlError;
   }, [photoUrlError]);
 
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
+
   async function guardar() {
-    setOk("");
-    setErr("");
     setTouched({ bio: true, phone: true, photoUrl: true });
 
     if (!canSave) {
-      setErr("Revisa los campos marcados.");
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de guardar.",
+        variant: "error",
+      });
       return;
     }
 
@@ -80,21 +100,32 @@ export default function BarberoPerfilPage() {
       };
 
       await patchBarberoMe(dto);
-      setOk("Perfil actualizado ✔︎");
+
+      mostrarFeedback({
+        title: "Perfil actualizado",
+        message: "Tus datos fueron guardados correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setErr(e?.message ? String(e.message) : "No se pudo guardar el perfil.");
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: e?.message ? String(e.message) : "No se pudo guardar el perfil.",
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
   }
 
   async function onSubirFoto(file: File) {
-    setOk("");
-    setErr("");
-
     if (file.size > 10 * 1024 * 1024) {
-      setErr("La imagen es muy pesada (máx 10MB).");
+      mostrarFeedback({
+        title: "Imagen muy pesada",
+        message: "La imagen supera el peso máximo permitido de 10MB.",
+        variant: "error",
+      });
       return;
     }
 
@@ -112,10 +143,19 @@ export default function BarberoPerfilPage() {
 
       await patchBarberoMe({ photoUrl: up.secureUrl });
 
-      setOk("Foto actualizada ✔︎");
+      mostrarFeedback({
+        title: "Foto actualizada",
+        message: "Tu foto de perfil fue actualizada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setErr(e?.message ? String(e.message) : "No se pudo subir la foto.");
+      mostrarFeedback({
+        title: "No se pudo subir la foto",
+        message: e?.message ? String(e.message) : "No se pudo subir la foto.",
+        variant: "error",
+      });
     } finally {
       setUploadingFoto(false);
     }
@@ -125,14 +165,22 @@ export default function BarberoPerfilPage() {
     <section className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-black">Mi perfil</h1>
-        <p className="mt-1 text-sm text-neutral-600">Edita tu bio, teléfono, foto y link de agenda.</p>
+        <p className="mt-1 text-sm text-neutral-600">
+          Edita tu bio, teléfono, foto y link de agenda.
+        </p>
       </div>
 
       {/* Banners de carga, error y ok se mantienen igual... */}
-      {loading && <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">Cargando perfil...</div>}
-      {!loading && error && <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-      {ok && <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">{ok}</div>}
-      {err && <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{err}</div>}
+      {loading && (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
+          Cargando perfil...
+        </div>
+      )}
+      {!loading && error && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {!loading && !error && data && (
         <>
@@ -142,7 +190,13 @@ export default function BarberoPerfilPage() {
               <p className="text-xs font-medium text-neutral-500">Preview</p>
               <div className="mt-4 flex items-center gap-3">
                 <div className="h-14 w-14 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
-                  {form.photoUrl.trim() && <img src={form.photoUrl.trim()} alt="Foto de perfil" className="h-full w-full object-cover" />}
+                  {form.photoUrl.trim() && (
+                    <img
+                      src={form.photoUrl.trim()}
+                      alt="Foto de perfil"
+                      className="h-full w-full object-cover"
+                    />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-black">{data.name}</p>
@@ -151,8 +205,12 @@ export default function BarberoPerfilPage() {
                 </div>
               </div>
               <div className="mt-4 space-y-1 text-sm">
-                <p className="text-neutral-700"><span className="font-medium">Tel:</span> {form.phone.trim() || "—"}</p>
-                <p className="text-neutral-700"><span className="font-medium">Bio:</span> {form.bio.trim() || "—"}</p>
+                <p className="text-neutral-700">
+                  <span className="font-medium">Tel:</span> {form.phone.trim() || "—"}
+                </p>
+                <p className="text-neutral-700">
+                  <span className="font-medium">Bio:</span> {form.bio.trim() || "—"}
+                </p>
               </div>
             </div>
 
@@ -226,6 +284,18 @@ export default function BarberoPerfilPage() {
           <PortafolioPanel />
         </>
       )}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

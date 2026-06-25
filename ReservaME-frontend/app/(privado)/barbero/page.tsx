@@ -8,6 +8,11 @@ import { cancelarReservaBarbero, completarReservaBarbero } from "@/services/rese
 
 import ReservaModal from "@/componentes/publico/ReservaModal";
 
+import { useBarberoMe } from "@/lib/useBarberoMe";
+import BloqueosHorariosPanel from "@/componentes/barber-time-blocks/BloqueosHorariosPanel";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+
 type ReservaItem = {
   id: string;
 
@@ -86,6 +91,12 @@ export default function BarberoHomePage() {
     to,
   });
 
+  const {
+    data: barberoActual,
+    loading: loadingBarberoActual,
+    error: errorBarberoActual,
+  } = useBarberoMe();
+
   const reservasHoy: ReservaItem[] = useMemo(() => {
     const items = (data?.items ?? []) as any[];
 
@@ -132,8 +143,14 @@ export default function BarberoHomePage() {
   }, [reservasHoy]);
 
   // banners
-  const [okMsg, setOkMsg] = useState("");
-  const [errMsg, setErrMsg] = useState("");
+  const [mostrarBloqueos, setMostrarBloqueos] = useState(false);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // acciones loading por reserva
   const [accionId, setAccionId] = useState<string | null>(null);
@@ -144,32 +161,67 @@ export default function BarberoHomePage() {
 
   // modal cancelar (custom)
   const [cancelTarget, setCancelTarget] = useState<ReservaItem | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<ReservaItem | null>(null);
 
-  function resetBanners() {
-    setOkMsg("");
-    setErrMsg("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
-  async function completar(reservaId: string) {
-    resetBanners();
+  function abrirCompletar(r: ReservaItem) {
+    setCompleteTarget(r);
+  }
+
+  function cerrarCompletar() {
+    if (accionId === completeTarget?.id) return;
+    setCompleteTarget(null);
+  }
+
+  async function confirmarCompletar() {
+    if (!completeTarget?.id) return;
+
     try {
-      setAccionId(reservaId);
-      await completarReservaBarbero(reservaId);
-      setOkMsg("Reserva completada ✔︎");
+      setAccionId(completeTarget.id);
+      await completarReservaBarbero(completeTarget.id);
+
+      setCompleteTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva completada",
+        message: "La reserva fue marcada como completada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setErrMsg(e?.message ? String(e.message) : "No se pudo completar la reserva.");
+      mostrarFeedback({
+        title: "No se pudo completar",
+        message: e?.message ? String(e.message) : "No se pudo completar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
   function abrirReprogramar(r: ReservaItem) {
-    resetBanners();
     if (!r.barberSlug) {
-      setErrMsg("No se pudo reprogramar: falta barberSlug.");
+      mostrarFeedback({
+        title: "No se pudo reprogramar",
+        message: "Falta el identificador público del barbero.",
+        variant: "error",
+      });
       return;
     }
+
     setReprogTarget(r);
     setReprogOpen(true);
   }
@@ -180,7 +232,6 @@ export default function BarberoHomePage() {
   }
 
   function abrirCancelar(r: ReservaItem) {
-    resetBanners();
     setCancelTarget(r);
   }
 
@@ -191,15 +242,25 @@ export default function BarberoHomePage() {
   async function confirmarCancelar() {
     if (!cancelTarget?.id) return;
 
-    resetBanners();
     try {
       setAccionId(cancelTarget.id);
       await cancelarReservaBarbero(cancelTarget.id);
-      setOkMsg("Reserva cancelada ✔︎");
-      cerrarCancelar();
+
+      setCancelTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva cancelada",
+        message: "La reserva fue cancelada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setErrMsg(e?.message ? String(e.message) : "No se pudo cancelar la reserva.");
+      mostrarFeedback({
+        title: "No se pudo cancelar",
+        message: e?.message ? String(e.message) : "No se pudo cancelar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -212,18 +273,47 @@ export default function BarberoHomePage() {
         <p className="text-sm text-neutral-600">Reservas de hoy y acciones rápidas.</p>
       </div>
 
-      {okMsg ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {okMsg}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-black">Acciones rápidas</p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Bloquea horarios específicos para que no puedan ser reservados.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setMostrarBloqueos((actual) => !actual)}
+          className="rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+        >
+          {mostrarBloqueos ? "Ocultar bloqueos" : "Gestionar bloqueos horarios"}
+        </button>
+      </div>
+
+      {mostrarBloqueos ? (
+        <div className="mt-4">
+          {loadingBarberoActual ? (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
+              Cargando perfil del barbero...
+            </div>
+          ) : errorBarberoActual ? (
+            <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+              {errorBarberoActual}
+            </div>
+          ) : barberoActual ? (
+            <BloqueosHorariosPanel
+              ocultarSelectorBarbero
+              barberIdInicial={barberoActual.id}
+              barberSlugInicial={barberoActual.slug}
+              titulo="Bloquear horarios"
+            />
+          ) : (
+            <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+              No se pudo identificar el perfil del barbero.
+            </div>
+          )}
         </div>
       ) : null}
-
-      {errMsg ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {errMsg}
-        </div>
-      ) : null}
-
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -332,7 +422,7 @@ export default function BarberoHomePage() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
-                        onClick={() => completar(r.id)}
+                        onClick={() => abrirCompletar(r)}
                         disabled={busy || !puedeAccionar}
                         className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                       >
@@ -379,46 +469,61 @@ export default function BarberoHomePage() {
           reservaId={reprogTarget.id}
           initialDate={isoToYYYYMMDD(reprogTarget.startAt)}
           onSuccess={async (info) => {
-            setOkMsg(info.mensaje || "Reserva reprogramada. Correo enviado ✔︎");
-            setErrMsg("");
             cerrarReprogramar();
+
+            mostrarFeedback({
+              title: "Reserva reprogramada",
+              message: info.mensaje || "La reserva fue reprogramada correctamente.",
+              variant: "success",
+            });
+
             await refetch();
           }}
         />
       ) : null}
 
-      {/* Modal Confirmar cancelación (custom) */}
-      {cancelTarget ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-black">Cancelar reserva</h3>
-            <p className="mt-2 text-sm text-neutral-600">
-              Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de{" "}
-              <span className="font-medium text-black">{cancelTarget.clientName}</span>?
-            </p>
+      <ConfirmDialog
+        open={Boolean(completeTarget)}
+        title="Completar reserva"
+        message={
+          completeTarget
+            ? `¿Seguro que quieres marcar como completada la reserva de ${completeTarget.clientName}?`
+            : ""
+        }
+        confirmText={accionId === completeTarget?.id ? "Completando..." : "Sí, completar"}
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void confirmarCompletar()}
+        onClose={cerrarCompletar}
+      />
 
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={cerrarCancelar}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Volver
-              </button>
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancelar reserva"
+        message={
+          cancelTarget
+            ? `Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de ${cancelTarget.clientName}?`
+            : ""
+        }
+        confirmText={accionId === cancelTarget?.id ? "Cancelando..." : "Sí, cancelar"}
+        cancelText="Volver"
+        variant="danger"
+        onConfirm={() => void confirmarCancelar()}
+        onClose={cerrarCancelar}
+      />
 
-              <button
-                type="button"
-                onClick={() => void confirmarCancelar()}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {accionId === cancelTarget.id ? "Cancelando..." : "Sí, cancelar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

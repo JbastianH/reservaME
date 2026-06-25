@@ -4,9 +4,19 @@ import {
   Get,
   Patch,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import type { TenantRequest } from '../../common/tenant/tenant-request.interface';
 import { PrismaService } from '../../config/prisma.service';
 import { Auth } from '../../common/decorators/auth.decorator';
+
+type RequestAutenticado = TenantRequest & Request;
+
+type UpdateSettingsDto = {
+  reminderHoursBefore: number;
+  cancellationHoursBefore: number;
+};
 
 @Controller('admin/settings')
 export class SettingsController {
@@ -14,30 +24,77 @@ export class SettingsController {
 
   @Auth('ADMIN')
   @Get()
-  async get() {
-    const settings = await this.prisma.appSetting.upsert({
-      where: { id: 1 },
-      update: {},
-      create: { id: 1, reminderHoursBefore: 24 },
+  async get(@Req() req: RequestAutenticado) {
+    const tenantId = req.tenant!.id;
+
+    const existente = await this.prisma.appSetting.findUnique({
+      where: { tenantId },
     });
 
-    return { ok: true, settings };
+    if (existente) {
+      return { ok: true, settings: existente };
+    }
+
+    try {
+      const settings = await this.prisma.appSetting.create({
+        data: {
+          tenantId,
+          reminderHoursBefore: 24,
+          cancellationHoursBefore: 3,
+        },
+      });
+
+      return { ok: true, settings };
+    } catch {
+      const settings = await this.prisma.appSetting.findUnique({
+        where: { tenantId },
+      });
+
+      if (!settings) {
+        throw new BadRequestException('No se pudo cargar la configuración.');
+      }
+
+      return { ok: true, settings };
+    }
   }
 
   @Auth('ADMIN')
   @Patch()
-  async update(@Body() dto: { reminderHoursBefore: number }) {
-    const h = Number(dto.reminderHoursBefore);
+  async update(@Req() req: RequestAutenticado, @Body() dto: UpdateSettingsDto) {
+    const reminderHours = Number(dto.reminderHoursBefore);
+    const cancellationHours = Number(dto.cancellationHoursBefore);
 
-    // Se valida rango razonable (1h a 168h = 7 días)
-    if (!Number.isFinite(h) || h < 1 || h > 168) {
-      throw new BadRequestException('reminderHoursBefore inválido (1..168).');
+    if (
+      !Number.isFinite(reminderHours) ||
+      reminderHours < 1 ||
+      reminderHours > 168
+    ) {
+      throw new BadRequestException(
+        'reminderHoursBefore inválido. Debe estar entre 1 y 168 horas.',
+      );
+    }
+
+    if (
+      !Number.isFinite(cancellationHours) ||
+      cancellationHours < 1 ||
+      cancellationHours > 168
+    ) {
+      throw new BadRequestException(
+        'cancellationHoursBefore inválido. Debe estar entre 1 y 168 horas.',
+      );
     }
 
     const settings = await this.prisma.appSetting.upsert({
-      where: { id: 1 },
-      update: { reminderHoursBefore: dto.reminderHoursBefore },
-      create: { id: 1, reminderHoursBefore: 24 },
+      where: { tenantId: req.tenant!.id },
+      update: {
+        reminderHoursBefore: reminderHours,
+        cancellationHoursBefore: cancellationHours,
+      },
+      create: {
+        tenantId: req.tenant!.id,
+        reminderHoursBefore: reminderHours,
+        cancellationHoursBefore: cancellationHours,
+      },
     });
 
     return { ok: true, settings };

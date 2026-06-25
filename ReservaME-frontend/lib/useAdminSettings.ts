@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ApiError } from "@/lib/api";
-import { getAdminSettings, updateReminderHoursBefore } from "@/services/admin-settings.service";
+import { getAdminSettings, updateAdminSettings } from "@/services/admin-settings.service";
+
+export type AdminSettings = {
+  reminderHoursBefore: number;
+  cancellationHoursBefore: number;
+};
 
 export function useAdminSettings() {
-  const [data, setData] = useState<{ reminderHoursBefore: number } | null>(null);
+  const [data, setData] = useState<AdminSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -13,11 +18,17 @@ export function useAdminSettings() {
   const refetch = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
       const res = await getAdminSettings();
-      setData(res.settings);
-    } catch (e: any) {
+
+      setData({
+        reminderHoursBefore: Number(res.settings.reminderHoursBefore ?? 24),
+        cancellationHoursBefore: Number(res.settings.cancellationHoursBefore ?? 3),
+      });
+    } catch (e) {
       const err = e as ApiError;
+
       setData(null);
       setError(err?.message ?? "No se pudo cargar la configuración.");
     } finally {
@@ -29,21 +40,38 @@ export function useAdminSettings() {
     void refetch();
   }, [refetch]);
 
-  const saveReminderHours = useCallback(async (hours: number) => {
-    setSaving(true);
-    setError("");
-    try {
-      const res = await updateReminderHoursBefore(hours);
-      setData(res.settings);
-      return { ok: true as const };
-    } catch (e: any) {
-      const err = e as ApiError;
-      setError(err?.message ?? "No se pudo guardar.");
-      return { ok: false as const };
-    } finally {
-      setSaving(false);
-    }
-  }, []);
+  const saveSettings = useCallback(
+    async (payload: { reminderHoursBefore: number; cancellationHoursBefore: number }) => {
+      setSaving(true);
+      setError("");
 
-  return { data, loading, saving, error, refetch, saveReminderHours };
+      try {
+        const res = await updateAdminSettings(payload);
+
+        setData({
+          reminderHoursBefore: Number(res.settings.reminderHoursBefore ?? 24),
+          cancellationHoursBefore: Number(res.settings.cancellationHoursBefore ?? 3),
+        });
+
+        return { ok: true as const };
+      } catch (e) {
+        const err = e as ApiError;
+
+        setError(err?.message ?? "No se pudo guardar.");
+        return { ok: false as const };
+      } finally {
+        setSaving(false);
+      }
+    },
+    [],
+  );
+
+  return {
+    data,
+    loading,
+    saving,
+    error,
+    refetch,
+    saveSettings,
+  };
 }

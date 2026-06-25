@@ -4,61 +4,57 @@ import * as bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  // --------------------------------------------------------
-  // 1. CREACIÓN DEL USUARIO ADMINISTRADOR
-  // --------------------------------------------------------
-  
-  const adminPasswordRaw = "Reservame2026@!"; 
-  const hashedPassword = await bcrypt.hash(adminPasswordRaw, 10);
-  const adminEmail = "admin@reservame.com";
+  const passwordRaw = "Reservame2026@!";
+  const passwordHash = await bcrypt.hash(passwordRaw, 10);
 
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {
-      role: "ADMIN",
-      passwordHash: hashedPassword, 
-      isActive: true,            
-    },
-    create: {
-      email: adminEmail,
-      passwordHash: hashedPassword, 
-      role: "ADMIN",
-      isActive: true,             
+  const tenant = await prisma.tenant.create({
+    data: {
+      name: "Black & White Studio",
+      domain: "black.localhost",
+      email: "admin@studioblackandwhite.cl",
+      address: "Valparaíso, Chile",
+      isActive: true,
+      settings: {
+        create: {
+          primaryColor: "#000000",
+          secondaryColor: "#FFFFFF",
+          headerColor: "#000000",
+          footerColor: "#000000",
+          fontFamily: "Inter",
+        },
+      },
     },
   });
 
-  console.log(`Admin configurado: ${adminEmail}`);
-  console.log(`Contraseña: ${adminPasswordRaw}`);
-  console.log(`Estado: Activo (isActive: true)`);
+  await prisma.user.create({
+    data: {
+      tenantId: null,
+      email: "superadmin@reservame.com",
+      passwordHash,
+      role: "SUPER_ADMIN",
+      isActive: true,
+    },
+  });
 
-  // --------------------------------------------------------
-  // 2. LÓGICA DE HORARIOS DE BARBEROS
-  // --------------------------------------------------------
-  
-  const barbers = await prisma.barber.findMany({ select: { id: true } });
+  await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      email: "admin@studioblackandwhite.cl",
+      passwordHash,
+      role: "ADMIN",
+      isActive: true,
+    },
+  });
 
-  for (const b of barbers) {
-    for (const day of ["MON","TUE","WED","THU","FRI","SAT","SUN"] as const) {
-      await prisma.barberWeeklySchedule.upsert({
-        where: { barberId_day: { barberId: b.id, day } },
-        update: {},
-        create: {
-          barberId: b.id,
-          day,
-          isClosed: false,
-          startMin: 600,
-          endMin: 1200,
-        },
-      });
-    }
-  }
-  
-  console.log("Horarios de barberos verificados.");
+  console.log("Seed ejecutado correctamente");
+  console.log("SUPER_ADMIN: superadmin@reservame.com");
+  console.log("ADMIN TENANT: admin@studioblackandwhite.cl");
+  console.log(`Contraseña: ${passwordRaw}`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("Error ejecutando seed:", e);
     process.exit(1);
   })
   .finally(async () => {

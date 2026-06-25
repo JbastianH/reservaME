@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ThrottlerModule, ThrottlerGuard, seconds } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
@@ -25,6 +25,30 @@ import { RemindersModule } from "./modules/reminders/reminders.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { ScheduleModule } from '@nestjs/schedule';
 import { ProductosModule } from './modules/productos/productos.module';
+import { TenantMiddleware } from "./common/tenant/tenant.middleware";
+import { TenantResolverService } from "./common/tenant/tenant-resolver.service";
+import { BarberosPublicosController } from "./modules/barberos-publicos/barberos-publicos.controller";
+import { ServiciosController } from "./modules/servicios/servicios.controller";
+import { BarberServicesController } from "./modules/barber-service/barber-service.controller";
+import { ReservasPublicasController } from "./modules/reservas-publicas/reservas-publicas.controller";
+import { BarberoBarberServiciosController } from "./modules/barber-service/barbero-barber-servicios.controller";
+import { DisponibilidadPublicaController } from "./modules/disponibilidad/disponibilidad-publica.controller";
+import { HorarioBarberoController } from "./modules/horarios/horario-barbero.controller";
+import { PortafolioAdminController } from "./modules/portafolio/portafolio-admin.controller";
+import { PortafolioBarberoController } from "./modules/portafolio/portafolio-barbero.controller";
+import { ProductosController } from "./modules/productos/productos.controller";
+import { ResenasController } from "./modules/resenas/resenas.controller";
+import { BarberoResenasController } from "./modules/resenas/barbero-resenas.controller";
+import { SettingsController } from "./modules/settings/settings.controller";
+import { ServiciosPublicosController } from "./modules/servicios-publicos/servicios-publicos.controller";
+import { BarbersController } from "./modules/barbers/barbers.controller";
+import { BarberoMeController } from "./modules/barbers/barbero-me.controller";
+import { ReservasController } from "./modules/reservas/reservas.controller";
+import { SuperAdminTenantsModule } from "./modules/super-admin-tenants/super-admin-tenants.module";
+import { TenantPublicoModule } from './modules/tenant-publico/tenant-publico.module';
+import { TenantPublicoController } from "./modules/tenant-publico/tenant-publico.controller";
+import { AdminTenantModule } from "./modules/admin-tenant/admin-tenant.module";
+import { BarberTimeBlocksModule } from "./modules/barber-time-blocks/barber-time-blocks.module";
 
 
 
@@ -66,15 +90,52 @@ import { ProductosModule } from './modules/productos/productos.module';
     SettingsModule,
     ScheduleModule.forRoot(),
     ProductosModule,
+    SuperAdminTenantsModule,
+    TenantPublicoModule,
+    AdminTenantModule,
+    BarberTimeBlocksModule
+  
   ],
   controllers: [AppController],
   providers: [
     AppService,
     RolesGuard,
+    TenantResolverService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes(
+      BarberosPublicosController,
+      ServiciosController,
+      BarberServicesController,
+      ReservasPublicasController,
+      BarberoBarberServiciosController,
+      DisponibilidadPublicaController,
+      HorarioBarberoController,
+      PortafolioAdminController,
+      PortafolioBarberoController,
+      ProductosController,
+      ResenasController,
+      BarberoResenasController,
+      SettingsController,
+      ServiciosPublicosController,
+      BarbersController,
+      BarberoMeController,
+      "auth/login",
+      "auth/admin/usuarios",
+      "auth/admin/usuarios/reenviar-activacion",
+      "auth/solicitar-recuperacion",
+      ReservasController,
+      TenantPublicoController,
+      'admin/tenant/configuracion',
+      'barber-time-blocks'
+    );
+  }
+
+}

@@ -18,6 +18,7 @@ export class ResenasPublicasService {
       where: { tokenHash },
       select: {
         id: true,
+        tenantId: true,
         type: true,
         usedAt: true,
         expiresAt: true,
@@ -25,38 +26,60 @@ export class ResenasPublicasService {
       },
     });
 
-    if (!token)
+    if (!token) {
       throw new NotFoundException('El enlace de reseña no es válido.');
-    if (token.type !== 'RESENA')
+    }
+
+    if (token.type !== 'RESENA') {
       throw new BadRequestException('Este enlace no corresponde a una reseña.');
-    if (!token.reservationId)
+    }
+
+    if (!token.tenantId) {
+      throw new BadRequestException('Token inválido (sin tenant asociado).');
+    }
+
+    if (!token.reservationId) {
       throw new BadRequestException('Token inválido (sin reserva asociada).');
-    if (token.usedAt)
+    }
+
+    if (token.usedAt) {
       throw new BadRequestException('Este enlace de reseña ya fue utilizado.');
-    if (token.expiresAt.getTime() <= Date.now())
+    }
+
+    if (token.expiresAt.getTime() <= Date.now()) {
       throw new BadRequestException(
         'Este enlace de reseña expiró. Solicita uno nuevo.',
       );
+    }
 
-    const reserva = await this.prisma.reservation.findUnique({
-      where: { id: token.reservationId },
+    const reserva = await this.prisma.reservation.findFirst({
+      where: {
+        id: token.reservationId,
+        tenantId: token.tenantId,
+      },
       select: {
         id: true,
+        tenantId: true,
         status: true,
         barberId: true,
       },
     });
 
-    if (!reserva)
+    if (!reserva) {
       throw new NotFoundException('La reserva asociada ya no existe.');
+    }
+
     if (reserva.status !== 'COMPLETADA') {
       throw new BadRequestException(
         'Solo puedes dejar una reseña cuando el servicio esté completado.',
       );
     }
 
-    const yaExiste = await this.prisma.review.findUnique({
-      where: { reservationId: reserva.id },
+    const yaExiste = await this.prisma.review.findFirst({
+      where: {
+        tenantId: token.tenantId,
+        reservationId: reserva.id,
+      },
       select: { id: true },
     });
 
@@ -69,6 +92,7 @@ export class ResenasPublicasService {
     const result = await this.prisma.$transaction(async (tx) => {
       const review = await tx.review.create({
         data: {
+          tenantId: token.tenantId!,
           reservationId: reserva.id,
           barberId: reserva.barberId,
           rating: dto.rating,
@@ -99,6 +123,7 @@ export class ResenasPublicasService {
       where: { tokenHash },
       select: {
         id: true,
+        tenantId: true,
         type: true,
         usedAt: true,
         expiresAt: true,
@@ -106,40 +131,53 @@ export class ResenasPublicasService {
       },
     });
 
-    if (!token)
+    if (!token) {
       throw new NotFoundException('El enlace de reseña no es válido.');
-    if (token.type !== 'RESENA')
+    }
+
+    if (token.type !== 'RESENA') {
       throw new BadRequestException('Este enlace no corresponde a una reseña.');
-    if (!token.reservationId)
+    }
+
+    if (!token.tenantId) {
+      throw new BadRequestException('Token inválido (sin tenant asociado).');
+    }
+
+    if (!token.reservationId) {
       throw new BadRequestException('Token inválido (sin reserva asociada).');
-    if (token.expiresAt.getTime() <= Date.now())
+    }
+
+    if (token.expiresAt.getTime() <= Date.now()) {
       throw new BadRequestException(
         'Este enlace de reseña expiró. Solicita uno nuevo.',
       );
+    }
 
-    const reserva = await this.prisma.reservation.findUnique({
-      where: { id: token.reservationId },
+    const reserva = await this.prisma.reservation.findFirst({
+      where: {
+        id: token.reservationId,
+        tenantId: token.tenantId,
+      },
       select: {
         id: true,
         status: true,
         clientName: true,
         barber: { select: { id: true, name: true, slug: true } },
         service: { select: { id: true, name: true } },
-        review: { select: { id: true } }, // si tienes relación 1-1, si no, quítalo
+        review: { select: { id: true } },
       },
     });
 
-    if (!reserva)
+    if (!reserva) {
       throw new NotFoundException('La reserva asociada ya no existe.');
+    }
 
-    // opcional: mantener misma regla que crearConToken (solo COMPLETADA)
     if (reserva.status !== 'COMPLETADA') {
       throw new BadRequestException(
         'Solo puedes dejar una reseña cuando el servicio esté completado.',
       );
     }
 
-    // si ya existe reseña, puedes devolver estado para que el front muestre “ya enviada”
     const yaTieneResena = Boolean(reserva.review?.id);
 
     return {

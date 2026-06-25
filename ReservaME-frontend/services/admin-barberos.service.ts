@@ -36,7 +36,6 @@ export async function actualizarBarberoAdmin(
   dto: {
     name?: string;
     slug?: string;
-    linkSetmore?: string;
     bio?: string;
     phone?: string;
     photoUrl?: string;

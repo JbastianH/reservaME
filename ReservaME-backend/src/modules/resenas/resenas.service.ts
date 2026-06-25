@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, TokenType } from "@prisma/client";
 import { PrismaService } from "../../config/prisma.service";
 import { hashToken } from "../../common/utils/tokens.util";
@@ -16,6 +20,7 @@ export class ResenasService {
       where: { tokenHash },
       select: {
         id: true,
+        tenantId: true,
         type: true,
         reservationId: true,
         expiresAt: true,
@@ -23,6 +28,7 @@ export class ResenasService {
         reservation: {
           select: {
             id: true,
+            tenantId: true,
             barberId: true,
             status: true,
           },
@@ -31,26 +37,55 @@ export class ResenasService {
     });
 
     if (!token) throw new NotFoundException("El link de reseña no es válido.");
-    if (token.type !== TokenType.RESENA) throw new BadRequestException("El link no corresponde a una reseña.");
-    if (!token.reservationId || !token.reservation) throw new BadRequestException("El link de reseña no es válido.");
+
+    if (token.type !== TokenType.RESENA) {
+      throw new BadRequestException("El link no corresponde a una reseña.");
+    }
+
+    if (!token.tenantId) {
+      throw new BadRequestException("El link de reseña no tiene tenant asociado.");
+    }
+
+    if (!token.reservationId || !token.reservation) {
+      throw new BadRequestException("El link de reseña no es válido.");
+    }
+
+    if (token.reservation.tenantId !== token.tenantId) {
+      throw new BadRequestException("El link de reseña no corresponde a esta reserva.");
+    }
+
     if (token.usedAt) throw new BadRequestException("Este link ya fue utilizado.");
-    if (token.expiresAt.getTime() <= Date.now()) throw new BadRequestException("Este link expiró. Solicita uno nuevo.");
+
+    if (token.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException("Este link expiró. Solicita uno nuevo.");
+    }
 
     if (token.reservation.status !== "COMPLETADA") {
-      throw new BadRequestException("Solo se puede dejar reseña cuando el servicio está completado.");
+      throw new BadRequestException(
+        "Solo se puede dejar reseña cuando el servicio está completado.",
+      );
     }
 
     const rating = dto.rating;
 
     return this.prisma.$transaction(async (tx) => {
-      const existe = await tx.review.findUnique({
-        where: { reservationId: token.reservationId! },
+      const existe = await tx.review.findFirst({
+        where: {
+          tenantId: token.tenantId!,
+          reservationId: token.reservationId!,
+        },
         select: { id: true },
       });
-      if (existe) throw new BadRequestException("Esta reserva ya tiene una reseña registrada.");
+
+      if (existe) {
+        throw new BadRequestException(
+          "Esta reserva ya tiene una reseña registrada.",
+        );
+      }
 
       const review = await tx.review.create({
         data: {
+          tenantId: token.tenantId!,
           reservationId: token.reservationId!,
           barberId: token.reservation!.barberId,
           rating,
@@ -68,11 +103,12 @@ export class ResenasService {
     });
   }
 
-  async listarAdmin(query: ListarResenasQueryDto) {
+  async listarAdmin(tenantId: string, query: ListarResenasQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
     const where: Prisma.ReviewWhereInput = {
+      tenantId,
       ...(query.barberId ? { barberId: query.barberId } : {}),
       ...(query.visible === undefined ? {} : { visible: query.visible }),
       ...(query.q
@@ -85,50 +121,64 @@ export class ResenasService {
         : {}),
     };
 
-const [total, items] = await this.prisma.$transaction([
-  this.prisma.review.count({ where }),
-  this.prisma.review.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    select: {
-      id: true,
-      reservationId: true,
-      barberId: true,
-      rating: true,
-      comment: true,
-      visible: true,
-      createdAt: true,
-      updatedAt: true,
-
-      reservation: {
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.review.count({ where }),
+      this.prisma.review.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
         select: {
-          clientName: true,
-          // clientPhone: true,
+          id: true,
+          reservationId: true,
+          barberId: true,
+          rating: true,
+          comment: true,
+          visible: true,
+          createdAt: true,
+          updatedAt: true,
+          reservation: {
+            select: {
+              clientName: true,
+            },
+          },
+          barber: { select: { id: true, name: true, slug: true } },
         },
-      },
-
-      barber: { select: { id: true, name: true, slug: true } },
-    },
-  }),
-]);
+      }),
+    ]);
 
     return { page, pageSize, total, items };
   }
 
-  async listarBarbero(userId: string, query: ListarResenasQueryDto) {
+  async listarBarbero(
+    tenantId: string,
+    userId: string,
+    query: ListarResenasQueryDto,
+  ) {
     const barber = await this.prisma.barber.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
       select: { id: true },
     });
-    if (!barber) throw new NotFoundException("No se encontró el perfil de barbero asociado a tu usuario.");
 
-    return this.listarAdmin({ ...query, barberId: barber.id });
+    if (!barber) {
+      throw new NotFoundException(
+        "No se encontró el perfil de barbero asociado a tu usuario.",
+      );
+    }
+
+    return this.listarAdmin(tenantId, { ...query, barberId: barber.id });
   }
 
-  async setVisibleComoAdmin(reviewId: string, visible: boolean) {
-    const existe = await this.prisma.review.findUnique({ where: { id: reviewId }, select: { id: true } });
+  async setVisibleComoAdmin(
+    tenantId: string,
+    reviewId: string,
+    visible: boolean,
+  ) {
+    const existe = await this.prisma.review.findFirst({
+      where: { id: reviewId, tenantId },
+      select: { id: true },
+    });
+
     if (!existe) throw new NotFoundException("Reseña no encontrada.");
 
     const updated = await this.prisma.review.update({
@@ -139,19 +189,35 @@ const [total, items] = await this.prisma.$transaction([
     return { ok: true, review: updated };
   }
 
-  async setVisibleComoBarbero(userId: string, reviewId: string, visible: boolean) {
+  async setVisibleComoBarbero(
+    tenantId: string,
+    userId: string,
+    reviewId: string,
+    visible: boolean,
+  ) {
     const barber = await this.prisma.barber.findFirst({
-      where: { userId },
+      where: { tenantId, userId },
       select: { id: true },
     });
-    if (!barber) throw new NotFoundException("No se encontró el perfil de barbero asociado a tu usuario.");
 
-    const review = await this.prisma.review.findUnique({
-      where: { id: reviewId },
+    if (!barber) {
+      throw new NotFoundException(
+        "No se encontró el perfil de barbero asociado a tu usuario.",
+      );
+    }
+
+    const review = await this.prisma.review.findFirst({
+      where: { id: reviewId, tenantId },
       select: { id: true, barberId: true },
     });
+
     if (!review) throw new NotFoundException("Reseña no encontrada.");
-    if (review.barberId !== barber.id) throw new BadRequestException("No tienes permiso para modificar esta reseña.");
+
+    if (review.barberId !== barber.id) {
+      throw new BadRequestException(
+        "No tienes permiso para modificar esta reseña.",
+      );
+    }
 
     const updated = await this.prisma.review.update({
       where: { id: reviewId },

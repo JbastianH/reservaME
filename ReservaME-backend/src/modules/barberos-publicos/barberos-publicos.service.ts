@@ -5,11 +5,12 @@ import { PrismaService } from '../../config/prisma.service';
 export class BarberosPublicosService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listar(q?: string) {
+  async listar(tenantId: string, q?: string) {
     const term = q?.trim();
 
     return this.prisma.barber.findMany({
       where: {
+        tenantId,
         isActive: true,
         ...(term
           ? {
@@ -27,40 +28,62 @@ export class BarberosPublicosService {
         slug: true,
         bio: true,
         phone: true,
-        linkSetmore: true,
         photoUrl: true,
       },
     });
   }
 
-  async obtenerPorSlug(slug: string) {
+  async obtenerPorSlug(tenantId: string, slug: string) {
     const barber = await this.prisma.barber.findUnique({
-      where: { slug },
+      where: {
+        tenantId_slug: {
+          tenantId,
+          slug,
+        },
+      },
       select: {
         id: true,
         name: true,
         slug: true,
         bio: true,
         phone: true,
-        linkSetmore: true,
         photoUrl: true,
 
         services: {
-          where: { isActive: true },
+          where: {
+            tenantId,
+            isActive: true,
+            service: {
+              tenantId,
+              isActive: true,
+            },
+          },
           select: {
             id: true,
             price: true,
             durationMin: true,
             service: {
-              select: { id: true, name: true, description: true },
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
             },
           },
         },
 
         portfolioImages: {
-          where: { visible: true, hiddenByAdmin: false },
+          where: {
+            tenantId,
+            visible: true,
+            hiddenByAdmin: false,
+          },
           orderBy: { position: 'asc' },
-          select: { id: true, imageUrl: true, position: true },
+          select: {
+            id: true,
+            imageUrl: true,
+            position: true,
+          },
         },
       },
     });
@@ -69,10 +92,18 @@ export class BarberosPublicosService {
     return barber;
   }
 
-  async listarServiciosPorSlug(slug: string) {
+  async listarServiciosPorSlug(tenantId: string, slug: string) {
     const barber = await this.prisma.barber.findUnique({
-      where: { slug },
-      select: { id: true, isActive: true },
+      where: {
+        tenantId_slug: {
+          tenantId,
+          slug,
+        },
+      },
+      select: {
+        id: true,
+        isActive: true,
+      },
     });
 
     if (!barber || !barber.isActive) {
@@ -81,16 +112,22 @@ export class BarberosPublicosService {
 
     return this.prisma.barberService.findMany({
       where: {
+        tenantId,
         barberId: barber.id,
         isActive: true,
-        service: { isActive: true },
+        service: {
+          tenantId,
+          isActive: true,
+        },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: {
+        createdAt: 'asc',
+      },
       select: {
         id: true,
         barberId: true,
         serviceId: true,
-        price: true, // Decimal -> normalmente llega como string en JSON
+        price: true,
         durationMin: true,
         isActive: true,
         service: {
@@ -105,10 +142,18 @@ export class BarberosPublicosService {
     });
   }
 
-  async listarResenasPorSlug(slug: string, take: number) {
+  async listarResenasPorSlug(tenantId: string, slug: string, take: number) {
     const barber = await this.prisma.barber.findUnique({
-      where: { slug },
-      select: { id: true, isActive: true },
+      where: {
+        tenantId_slug: {
+          tenantId,
+          slug,
+        },
+      },
+      select: {
+        id: true,
+        isActive: true,
+      },
     });
 
     if (!barber || !barber.isActive) {
@@ -117,10 +162,13 @@ export class BarberosPublicosService {
 
     return this.prisma.review.findMany({
       where: {
+        tenantId,
         barberId: barber.id,
         visible: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: {
+        createdAt: 'desc',
+      },
       take,
       select: {
         id: true,
@@ -129,8 +177,12 @@ export class BarberosPublicosService {
         createdAt: true,
         reservation: {
           select: {
-            clientName: true, // para mostrar “Juan P.”
-            service: { select: { name: true } },
+            clientName: true,
+            service: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
       },

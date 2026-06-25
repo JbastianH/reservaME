@@ -1,15 +1,39 @@
-import { Body, Controller, Param, Patch } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  NotFoundException,
+  Param,
+  Patch,
+  Req,
+} from "@nestjs/common";
 import { Auth } from "../../common/decorators/auth.decorator";
 import { PrismaService } from "../../config/prisma.service";
 import { SetVisiblePortafolioDto } from "./dto/set-visible-portafolio.dto";
+import type { TenantRequest } from "../../common/tenant/tenant-request.interface";
 
 @Auth("ADMIN")
 @Controller("admin/portafolio")
 export class PortafolioAdminController {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async validarImagenDelTenant(tenantId: string, id: string) {
+    const imagen = await this.prisma.portfolioImage.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (!imagen) {
+      throw new NotFoundException("Imagen no encontrada.");
+    }
+  }
+
   @Patch(":id/ocultar")
-  ocultar(@Param("id") id: string) {
+  async ocultar(@Req() req: TenantRequest, @Param("id") id: string) {
+    await this.validarImagenDelTenant(req.tenant!.id, id);
+
     return this.prisma.portfolioImage.update({
       where: { id },
       data: { hiddenByAdmin: true },
@@ -18,7 +42,9 @@ export class PortafolioAdminController {
   }
 
   @Patch(":id/restaurar")
-  restaurar(@Param("id") id: string) {
+  async restaurar(@Req() req: TenantRequest, @Param("id") id: string) {
+    await this.validarImagenDelTenant(req.tenant!.id, id);
+
     return this.prisma.portfolioImage.update({
       where: { id },
       data: { hiddenByAdmin: false },
@@ -27,10 +53,13 @@ export class PortafolioAdminController {
   }
 
   @Patch(":id/visible")
-  setVisible(
+  async setVisible(
+    @Req() req: TenantRequest,
     @Param("id") id: string,
     @Body() dto: SetVisiblePortafolioDto,
   ) {
+    await this.validarImagenDelTenant(req.tenant!.id, id);
+
     return this.prisma.portfolioImage.update({
       where: { id },
       data: { visible: dto.visible },

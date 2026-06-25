@@ -11,10 +11,10 @@ export type PublicResenaItem = {
   };
 };
 
-export function listarResenasPorBarberoPublico(slug: string, limit = 10) {
+export function listarResenasPorBarberoPublico(slug: string,  tenantHost?: string | null, limit = 10) {
   return apiGet<PublicResenaItem[]>(
     `/public/barberos/${encodeURIComponent(slug)}/resenas?limit=${limit}`,
-    { auth: false },
+    { auth: false, tenantHost },
   );
 
   
@@ -33,17 +33,18 @@ export type ResenaTokenPublicaResponse = {
   yaTieneResena?: boolean;
 };
 
-export function obtenerResenaPorToken(token: string) {
+export function obtenerResenaPorToken(token: string, tenantHost?: string | null) {
   return apiGet<ResenaTokenPublicaResponse>(`/public/resenas/${encodeURIComponent(token)}`, {
     auth: false,
+    tenantHost,
   });
 }
 
-export function crearResenaConToken(token: string, dto: { rating: number; comment?: string }) {
+export function crearResenaConToken(token: string, dto: { rating: number; comment?: string }, tenantHost?: string | null) {
   return apiPost<{ ok: true; mensaje: string }>(
     `/public/resenas/${encodeURIComponent(token)}`,
     dto,
-    { auth: false },
+    { auth: false, tenantHost },
   );
 }
 

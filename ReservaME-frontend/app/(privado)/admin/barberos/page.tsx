@@ -10,6 +10,9 @@ import {
 import { crearUserAdmin, reenviarActivacionAdmin } from "@/services/admin-users.service";
 import Link from "next/link";
 
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+
 type BarberoItem = {
   id: string;
   name: string;
@@ -34,6 +37,11 @@ type FormState = {
   bio: string;
   phone: string;
   photoUrl: string;
+};
+type ToggleBarberoTarget = {
+  id: string;
+  name: string;
+  nextActive: boolean;
 };
 
 function isValidEmail(v: string) {
@@ -65,6 +73,7 @@ export default function AdminBarberosPage() {
   // Modal create/edit
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -94,23 +103,29 @@ export default function AdminBarberosPage() {
   // Slug autogenerado: solo en CREATE mientras no sea manual
   const [slugManual, setSlugManual] = useState(false);
 
-  // Confirmación activar/desactivar
-  const [confirm, setConfirm] = useState<{
-    open: boolean;
-    id: string | null;
-    nextActive: boolean;
-  }>({ open: false, id: null, nextActive: true });
+  const [toggleTarget, setToggleTarget] = useState<ToggleBarberoTarget | null>(null);
 
-  // Mensajes UI
-  const [bannerOk, setBannerOk] = useState("");
-  const [bannerError, setBannerError] = useState("");
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // Busy
   const [accionId, setAccionId] = useState<string | null>(null);
 
-  function resetBanners() {
-    setBannerOk("");
-    setBannerError("");
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
   }
 
   const nameError = useMemo(() => {
@@ -146,13 +161,7 @@ export default function AdminBarberosPage() {
     if (editId) {
       return commonValid;
     }
-    return (
-      commonValid &&
-      !emailError &&
-      form.name.trim() &&
-      form.slug.trim() &&
-      form.email.trim()
-    );
+    return commonValid && !emailError && form.name.trim() && form.slug.trim() && form.email.trim();
   }, [editId, nameError, slugError, emailError, form.name, form.slug, form.email]);
 
   const barberosFiltrados = useMemo(() => {
@@ -174,7 +183,6 @@ export default function AdminBarberosPage() {
   }, [barberos, q, estado]);
 
   function abrirCrear() {
-    resetBanners();
     setEditId(null);
     setSlugManual(false);
     setForm({
@@ -197,13 +205,12 @@ export default function AdminBarberosPage() {
   }
 
   function abrirEditar(item: BarberoItem) {
-    resetBanners();
     setEditId(item.id);
-    setSlugManual(true); // en editar NO se autogenera
+    setSlugManual(true);
     setForm({
       name: item.name ?? "",
       slug: item.slug ?? "",
-      email: item.user?.email ?? "", // solo visual, NO se envía al backend en UPDATE
+      email: item.user?.email ?? "",
       bio: item.bio ?? "",
       phone: item.phone ?? "",
       photoUrl: item.photoUrl ?? "",
@@ -220,17 +227,70 @@ export default function AdminBarberosPage() {
   }
 
   function cerrarModal() {
-    if (accionId) return;
+    if (accionId === (editId ?? "__create__")) return;
+
     setModalOpen(false);
     setEditId(null);
+    setSaveConfirmOpen(false);
+
+    setTouched({
+      name: false,
+      slug: false,
+      email: false,
+      bio: false,
+      phone: false,
+      photoUrl: false,
+    });
+  }
+
+  function pedirGuardar() {
+    setTouched((p) => ({
+      ...p,
+      name: true,
+      slug: true,
+      email: true,
+    }));
+
+    if (!canSave) {
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de guardar.",
+        variant: "error",
+      });
+      return;
+    }
+
+    const payloadEmail = form.email.trim().toLowerCase();
+
+    if (!editId && (!payloadEmail || !isValidEmail(payloadEmail))) {
+      mostrarFeedback({
+        title: "Correo inválido",
+        message: "Ingresa un correo válido para crear el usuario.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setSaveConfirmOpen(true);
   }
 
   async function guardar() {
-    resetBanners();
-    setTouched((p) => ({ ...p, name: true, slug: true, email: true }));
+    setTouched((p) => ({
+      ...p,
+      name: true,
+      slug: true,
+      email: true,
+    }));
 
     if (!canSave) {
-      setBannerError("Revisa los campos marcados.");
+      setSaveConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "Campos inválidos",
+        message: "Revisa los campos marcados antes de guardar.",
+        variant: "error",
+      });
+
       return;
     }
 
@@ -242,18 +302,23 @@ export default function AdminBarberosPage() {
     const payloadPhone = form.phone.trim() || undefined;
     const payloadPhotoUrl = form.photoUrl.trim() || undefined;
 
+    if (!editId && (!payloadEmail || !isValidEmail(payloadEmail))) {
+      setSaveConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "Correo inválido",
+        message: "Ingresa un correo válido para crear el usuario.",
+        variant: "error",
+      });
+
+      return;
+    }
+
     try {
       setAccionId(editId ?? "__create__");
 
-      // ===== CREATE =====
       if (!editId) {
-        if (!payloadEmail || !isValidEmail(payloadEmail)) {
-          setBannerError("Ingresa un correo válido para crear el usuario.");
-          return;
-        }
-
-        // 1) Crear usuario BARBERO
-        const user = await crearUserAdmin({
+        await crearUserAdmin({
           email: payloadEmail,
           role: "BARBERO",
           name: payloadName,
@@ -263,8 +328,15 @@ export default function AdminBarberosPage() {
           photoUrl: payloadPhotoUrl,
         });
 
-        setBannerOk("Barbero creado ✔︎ (usuario creado para activación)");
+        setSaveConfirmOpen(false);
         setModalOpen(false);
+
+        mostrarFeedback({
+          title: "Barbero creado",
+          message: "El usuario fue creado correctamente. Queda pendiente la activación por correo.",
+          variant: "success",
+        });
+
         await refetch();
         return;
       }
@@ -277,64 +349,111 @@ export default function AdminBarberosPage() {
         photoUrl: payloadPhotoUrl,
       });
 
-      setBannerOk("Barbero actualizado ✔︎");
+      setSaveConfirmOpen(false);
       setModalOpen(false);
+
+      mostrarFeedback({
+        title: "Barbero actualizado",
+        message: "Los cambios del barbero fueron guardados correctamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(e?.message ? String(e.message) : "No se pudieron guardar los cambios.");
+      setSaveConfirmOpen(false);
+
+      mostrarFeedback({
+        title: "No se pudo guardar",
+        message: e?.message ? String(e.message) : "No se pudieron guardar los cambios.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
   function pedirToggle(item: BarberoItem) {
-    resetBanners();
-    setConfirm({ open: true, id: item.id, nextActive: !item.isActive });
+    setToggleTarget({
+      id: item.id,
+      name: item.name,
+      nextActive: !item.isActive,
+    });
+  }
+
+  function cancelarToggle() {
+    if (accionId === toggleTarget?.id) return;
+    setToggleTarget(null);
   }
 
   async function confirmarToggle() {
-    if (!confirm.id) return;
-
-    resetBanners();
+    if (!toggleTarget) return;
 
     try {
-      setAccionId(confirm.id);
+      setAccionId(toggleTarget.id);
 
-      if (confirm.nextActive) await activarBarberoAdmin(confirm.id);
-      else await desactivarBarberoAdmin(confirm.id);
+      if (toggleTarget.nextActive) {
+        await activarBarberoAdmin(toggleTarget.id);
+      } else {
+        await desactivarBarberoAdmin(toggleTarget.id);
+      }
 
-      setBannerOk(confirm.nextActive ? "Barbero activado ✔︎" : "Barbero desactivado ✔︎");
-      setConfirm({ open: false, id: null, nextActive: true });
+      setToggleTarget(null);
+
+      mostrarFeedback({
+        title: toggleTarget.nextActive ? "Barbero activado" : "Barbero desactivado",
+        message: toggleTarget.nextActive
+          ? "El barbero volverá a estar disponible."
+          : "El barbero ya no estará disponible públicamente.",
+        variant: "success",
+      });
+
       await refetch();
     } catch (e: any) {
-      setBannerError(
-        e?.message ? String(e.message) : "No se pudo actualizar el estado del barbero.",
-      );
+      mostrarFeedback({
+        title: "No se pudo actualizar",
+        message: e?.message ? String(e.message) : "No se pudo actualizar el estado del barbero.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
-  function cancelarToggle() {
-    if (accionId) return;
-    setConfirm({ open: false, id: null, nextActive: true });
-  }
-
   async function reenviarCorreo(item: BarberoItem) {
-    if (!item.user?.email) return; // Validación de seguridad
-    if (item.user.isActive) return; // Doble validación: si está activo, no hace nada
+    if (!item.user?.email) {
+      mostrarFeedback({
+        title: "Correo no disponible",
+        message: "Este barbero no tiene un correo asociado.",
+        variant: "error",
+      });
+      return;
+    }
 
-    resetBanners();
+    if (item.user.isActive) {
+      mostrarFeedback({
+        title: "Cuenta ya activada",
+        message: "Este usuario ya tiene su cuenta activada.",
+        variant: "error",
+      });
+      return;
+    }
 
     try {
       setAccionId(item.id);
 
-      // Llamar al servicio
       await reenviarActivacionAdmin({ email: item.user.email });
 
-      setBannerOk(`Correo de activación reenviado a ${item.user.email} ✔︎`);
+      mostrarFeedback({
+        title: "Correo reenviado",
+        message: `Se envió nuevamente el correo de activación a ${item.user.email}.`,
+        variant: "success",
+      });
     } catch (e: any) {
-      setBannerError(e?.message || "No se pudo reenviar el correo.");
+      mostrarFeedback({
+        title: "No se pudo reenviar",
+        message: e?.message ? String(e.message) : "No se pudo reenviar el correo.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -363,15 +482,15 @@ export default function AdminBarberosPage() {
         </button>
       </div>
 
-      {bannerOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {bannerOk}
+      {loading ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
+          Cargando barberos...
         </div>
       ) : null}
 
-      {bannerError ? (
+      {!loading && error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {bannerError}
+          {error}
         </div>
       ) : null}
 
@@ -489,7 +608,12 @@ export default function AdminBarberosPage() {
                             <button
                               onClick={() => pedirToggle(b)}
                               disabled={Boolean(accionId)}
-                              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs text-black hover:bg-neutral-50 disabled:opacity-50"
+                              className={[
+                                "rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                                b.isActive
+                                  ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                                  : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                              ].join(" ")}
                             >
                               {rowBusy ? "Procesando..." : b.isActive ? "Desactivar" : "Activar"}
                             </button>
@@ -577,7 +701,12 @@ export default function AdminBarberosPage() {
                         <button
                           onClick={() => pedirToggle(b)}
                           disabled={Boolean(accionId)}
-                          className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm whitespace-nowrap text-black hover:bg-neutral-50 disabled:opacity-50"
+                          className={[
+                            "shrink-0 rounded-lg border px-3 py-2 text-sm font-medium whitespace-nowrap transition disabled:cursor-not-allowed disabled:opacity-60",
+                            b.isActive
+                              ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
+                              : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                          ].join(" ")}
                         >
                           {rowBusy ? "Procesando..." : b.isActive ? "Desactivar" : "Activar"}
                         </button>
@@ -736,48 +865,77 @@ export default function AdminBarberosPage() {
               </button>
 
               <button
-                onClick={() => void guardar()}
-                disabled={!canSave || Boolean(accionId)}
+                onClick={pedirGuardar}
                 className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+                disabled={!canSave || accionId === (editId ?? "__create__")}
               >
-                {accionId ? "Guardando..." : "Guardar"}
+                {accionId === (editId ?? "__create__") ? "Guardando..." : "Guardar"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* Confirm toggle */}
-      {confirm.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40" onClick={cancelarToggle} />
+      <ConfirmDialog
+        open={saveConfirmOpen}
+        title={editId ? "Guardar cambios" : "Crear barbero"}
+        message={
+          editId
+            ? `¿Seguro que quieres guardar los cambios del barbero "${form.name.trim() || "sin nombre"}"?`
+            : `¿Seguro que quieres crear al barbero "${form.name.trim() || "sin nombre"}"? Se enviará un correo de activación al usuario.`
+        }
+        confirmText={
+          accionId === (editId ?? "__create__")
+            ? "Guardando..."
+            : editId
+              ? "Sí, guardar"
+              : "Sí, crear"
+        }
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void guardar()}
+        onClose={() => {
+          if (accionId === (editId ?? "__create__")) return;
+          setSaveConfirmOpen(false);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(toggleTarget)}
+        title={toggleTarget?.nextActive ? "Activar barbero" : "Desactivar barbero"}
+        message={
+          toggleTarget
+            ? toggleTarget.nextActive
+              ? `¿Seguro que quieres activar al barbero "${toggleTarget.name}"?`
+              : `¿Seguro que quieres desactivar al barbero "${toggleTarget.name}"?`
+            : ""
+        }
+        confirmText={
+          accionId === toggleTarget?.id
+            ? toggleTarget?.nextActive
+              ? "Activando..."
+              : "Desactivando..."
+            : toggleTarget?.nextActive
+              ? "Sí, activar"
+              : "Sí, desactivar"
+        }
+        cancelText="Volver"
+        variant={toggleTarget?.nextActive ? "default" : "danger"}
+        onConfirm={() => void confirmarToggle()}
+        onClose={cancelarToggle}
+      />
 
-          <div className="relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-black">Confirmación</h3>
-            <p className="mt-2 text-sm text-neutral-700">
-              ¿Seguro que quieres {confirm.nextActive ? "activar" : "desactivar"} este barbero?
-            </p>
-
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                onClick={cancelarToggle}
-                disabled={Boolean(accionId)}
-                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={() => void confirmarToggle()}
-                disabled={Boolean(accionId)}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {accionId ? "Procesando..." : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

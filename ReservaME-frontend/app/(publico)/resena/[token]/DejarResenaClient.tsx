@@ -3,31 +3,48 @@
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { crearResenaConToken, obtenerResenaPorToken } from "@/services/resenas-publicas.service";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
 
 function isExpired(expiresAt: string) {
   return new Date(expiresAt).getTime() <= Date.now();
 }
 
+function obtenerMensajeError(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return fallback;
+}
+
 function Star({
   filled,
+  secondaryColor,
   ...props
-}: { filled: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: {
+  filled: boolean;
+  secondaryColor: string;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       aria-label={filled ? "Quitar estrella" : "Agregar estrella"}
-      className="rounded-md p-1 hover:bg-neutral-100 focus:ring-2 focus:ring-black focus:outline-none"
+      className="rounded-md p-1 transition hover:bg-white/10 focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+      style={{
+        color: secondaryColor,
+      }}
       {...props}
     >
       <svg
-        width="26"
-        height="26"
+        width="30"
+        height="30"
         viewBox="0 0 24 24"
-        className={filled ? "fill-black" : "fill-none"}
+        className={filled ? "fill-current" : "fill-none"}
       >
         <path
           d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-          stroke="black"
+          stroke="currentColor"
           strokeWidth="1.4"
         />
       </svg>
@@ -35,53 +52,79 @@ function Star({
   );
 }
 
-type ResenaTokenInfo = {
-  ok: true;
-  token: { usedAt: string | null; expiresAt: string };
-  reserva: {
-    id: string;
-    clientName: string;
-    service: { name: string };
-    barber: { name: string };
-  };
+type Props = {
+  token: string;
+  secondaryColor?: string;
+  fontFamilyTenant?: string;
 };
 
-export default function DejarResenaClient({ token }: { token: string }) {
+export default function DejarResenaClient({
+  token,
+  secondaryColor = "#ffffff",
+  fontFamilyTenant,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<Awaited<ReturnType<typeof obtenerResenaPorToken>> | null>(null);
 
   const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState("");
-
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
 
   useEffect(() => {
     if (!token || token === "undefined") {
       setLoading(false);
-      setErr("Enlace de reseña inválido.");
+      setLoadError("Enlace de reseña inválido.");
       return;
     }
 
     let alive = true;
 
-    (async () => {
+    async function cargarResena() {
       setLoading(true);
-      setErr("");
-      setOk("");
+      setLoadError("");
+      setSubmitted(false);
+
       try {
         const r = await obtenerResenaPorToken(token);
+
         if (!alive) return;
+
         setData(r);
-      } catch (e: any) {
+      } catch (e) {
         if (!alive) return;
-        setErr(e?.message ? String(e.message) : "No se pudo cargar el enlace de reseña.");
+
+        setLoadError(obtenerMensajeError(e, "No se pudo cargar el enlace de reseña."));
       } finally {
         if (!alive) return;
+
         setLoading(false);
       }
-    })();
+    }
+
+    void cargarResena();
 
     return () => {
       alive = false;
@@ -90,11 +133,13 @@ export default function DejarResenaClient({ token }: { token: string }) {
 
   const expired = useMemo(() => {
     if (!data) return false;
+
     return isExpired(data.token.expiresAt);
   }, [data]);
 
   const used = useMemo(() => {
     if (!data) return false;
+
     return Boolean(data.token.usedAt) || Boolean(data.yaTieneResena);
   }, [data]);
 
@@ -103,25 +148,51 @@ export default function DejarResenaClient({ token }: { token: string }) {
     if (busy) return false;
     if (expired) return false;
     if (used) return false;
+    if (submitted) return false;
     if (rating < 1 || rating > 5) return false;
+
     return true;
-  }, [data, busy, expired, used, rating]);
+  }, [data, busy, expired, used, rating, submitted]);
 
+  function pedirEnviar() {
+    if (!canSubmit) {
+      mostrarFeedback({
+        title: "No se puede enviar",
+        message:
+          "Este enlace no permite enviar la reseña. Puede haber expirado o ya fue utilizado.",
+        variant: "error",
+      });
+
+      return;
+    }
+
+    setConfirmOpen(true);
+  }
   async function enviar() {
-    setErr("");
-    setOk("");
-
     if (!canSubmit) return;
 
     try {
+      setConfirmOpen(false);
       setBusy(true);
+
       const resp = await crearResenaConToken(token, {
         rating,
         comment: comment.trim() ? comment.trim() : undefined,
       });
-      setOk(resp.mensaje ?? "¡Gracias! Tu reseña fue registrada ✔︎");
-    } catch (e: any) {
-      setErr(e?.message ? String(e.message) : "No se pudo enviar la reseña.");
+
+      setSubmitted(true);
+
+      mostrarFeedback({
+        title: "Reseña enviada",
+        message: resp.mensaje ?? "¡Gracias! Tu reseña fue registrada correctamente.",
+        variant: "success",
+      });
+    } catch (e) {
+      mostrarFeedback({
+        title: "No se pudo enviar",
+        message: obtenerMensajeError(e, "No se pudo enviar la reseña."),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -129,16 +200,19 @@ export default function DejarResenaClient({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-sm text-neutral-600">
+      <div
+        className="rounded-[2rem] border bg-white/10 p-6 text-sm text-white/60 shadow-2xl backdrop-blur-sm"
+        style={{ borderColor: `${secondaryColor}55` }}
+      >
         Cargando reseña...
       </div>
     );
   }
 
-  if (err && !data) {
+  if (loadError && !data) {
     return (
-      <div className="rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
-        {err}
+      <div className="rounded-[2rem] border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-100 shadow-2xl backdrop-blur-sm">
+        {loadError}
       </div>
     );
   }
@@ -146,85 +220,144 @@ export default function DejarResenaClient({ token }: { token: string }) {
   if (!data) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6">
-        <h1 className="text-2xl font-semibold text-black">Dejar reseña</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          Tu opinión ayuda a mejorar la experiencia en ReservaME.
+    <section className="space-y-6 font-sans">
+      <div>
+        <p
+          className="text-xs font-semibold tracking-[0.35em] uppercase"
+          style={{
+            color: secondaryColor,
+            fontFamily: fontFamilyTenant,
+          }}
+        >
+          Opinión del cliente
         </p>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <h1 className="mt-2 text-2xl font-semibold text-white">Dejar reseña</h1>
+
+        <p className="mt-1 text-sm text-white/60">
+          Tu opinión ayuda a mejorar la experiencia en nuestro local.
+        </p>
+      </div>
+
+      <div
+        className="rounded-[2rem] border bg-white/10 p-6 shadow-xl backdrop-blur-sm"
+        style={{ borderColor: `${secondaryColor}33` }}
+      >
+        <h2 className="text-lg font-semibold text-white">Datos de la reserva</h2>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs font-medium text-neutral-500">Cliente</p>
-            <p className="text-sm text-black">{data.reserva.clientName}</p>
+            <p className="text-xs font-medium text-white/45">Cliente</p>
+            <p className="mt-1 text-sm text-white">{data.reserva.clientName}</p>
           </div>
+
           <div>
-            <p className="text-xs font-medium text-neutral-500">Servicio</p>
-            <p className="text-sm text-black">{data.reserva.service.name}</p>
+            <p className="text-xs font-medium text-white/45">Servicio</p>
+            <p className="mt-1 text-sm text-white">{data.reserva.service.name}</p>
           </div>
+
           <div>
-            <p className="text-xs font-medium text-neutral-500">Barbero</p>
-            <p className="text-sm text-black">{data.reserva.barber.name}</p>
+            <p className="text-xs font-medium text-white/45">Barbero</p>
+            <p className="mt-1 text-sm text-white">{data.reserva.barber.name}</p>
           </div>
+
           <div>
-            <p className="text-xs font-medium text-neutral-500">Estado</p>
-            <p className="text-sm text-black">{data.reserva.status}</p>
+            <p className="text-xs font-medium text-white/45">Estado</p>
+            <p className="mt-1 text-sm text-white">{data.reserva.status}</p>
           </div>
         </div>
       </div>
 
-      {ok ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {ok}
-        </div>
-      ) : null}
-
-      {err ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {err}
-        </div>
-      ) : null}
-
       {expired || used ? (
-        <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+        <div
+          className="rounded-2xl border bg-white/10 p-4 text-sm text-white/70"
+          style={{ borderColor: `${secondaryColor}33` }}
+        >
           {expired ? "Este enlace expiró." : null}
           {expired && used ? " " : null}
           {used ? "Este enlace ya fue utilizado." : null}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-black">Tu calificación</h2>
+      <div
+        className="rounded-[2rem] border bg-white/10 p-6 shadow-xl backdrop-blur-sm"
+        style={{ borderColor: `${secondaryColor}33` }}
+      >
+        <h2 className="text-lg font-semibold text-white">Tu calificación</h2>
 
-        <div className="mt-3 flex items-center gap-1">
+        <p className="mt-1 text-sm text-white/60">
+          Selecciona de 1 a 5 estrellas según tu experiencia.
+        </p>
+
+        <div className="mt-4 flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((i) => (
-            <Star key={i} filled={i <= rating} disabled={!canSubmit} onClick={() => setRating(i)} />
+            <Star
+              key={i}
+              filled={i <= rating}
+              secondaryColor={secondaryColor}
+              disabled={!canSubmit}
+              onClick={() => setRating(i)}
+            />
           ))}
-          <span className="ml-2 text-sm text-neutral-600">{rating}/5</span>
+
+          <span className="ml-2 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-white">
+            {rating}/5
+          </span>
         </div>
 
-        <div className="mt-5">
-          <label className="text-xs font-medium text-neutral-600">Comentario (opcional)</label>
+        <div className="mt-6">
+          <label className="text-xs font-medium text-white/55">Comentario opcional</label>
+
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             disabled={!canSubmit}
             rows={4}
-            className="mt-1 w-full resize-none rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-black disabled:opacity-50"
+            className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white transition outline-none placeholder:text-white/30 focus:border-white/40 disabled:opacity-50"
             placeholder="Cuéntanos cómo fue tu experiencia..."
           />
         </div>
 
-        <div className="mt-5 flex justify-end">
+        <div className="mt-6 flex justify-end">
           <button
-            onClick={() => void enviar()}
+            type="button"
+            onClick={pedirEnviar}
             disabled={!canSubmit}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+            className="rounded-xl px-5 py-3 text-sm font-semibold text-black transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: secondaryColor }}
           >
             {busy ? "Enviando..." : "Enviar reseña"}
           </button>
         </div>
       </div>
-    </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Enviar reseña"
+        message={`¿Seguro que quieres enviar esta reseña con una calificación de ${rating}/5? Después de enviarla no podrás modificarla desde este enlace.`}
+        confirmText={busy ? "Enviando..." : "Sí, enviar"}
+        cancelText="Volver"
+        variant="default"
+        loading={busy}
+        onConfirm={() => void enviar()}
+        onClose={() => {
+          if (busy) return;
+          setConfirmOpen(false);
+        }}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
+    </section>
   );
 }

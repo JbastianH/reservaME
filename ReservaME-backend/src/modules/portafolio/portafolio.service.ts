@@ -10,9 +10,9 @@ export class PortafolioService {
   constructor(private readonly prisma: PrismaService) {}
 
   /* ===== helpers ===== */
-  private async obtenerBarberoId(userId: string) {
-    const barbero = await this.prisma.barber.findUnique({
-      where: { userId },
+  private async obtenerBarberoId(tenantId: string, userId: string) {
+    const barbero = await this.prisma.barber.findFirst({
+      where: { tenantId, userId },
       select: { id: true },
     });
 
@@ -24,11 +24,11 @@ export class PortafolioService {
   }
 
   /* ===== listar ===== */
-  async listarMisImagenes(userId: string) {
-    const barberoId = await this.obtenerBarberoId(userId);
+  async listarMisImagenes(tenantId: string, userId: string) {
+    const barberoId = await this.obtenerBarberoId(tenantId, userId);
 
     return this.prisma.portfolioImage.findMany({
-      where: { barberId: barberoId },
+      where: { tenantId, barberId: barberoId },
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -42,11 +42,11 @@ export class PortafolioService {
   }
 
   /* ===== crear ===== */
-  async crearImagen(userId: string, imageUrl: string) {
-    const barberoId = await this.obtenerBarberoId(userId);
+  async crearImagen(tenantId: string, userId: string, imageUrl: string) {
+    const barberoId = await this.obtenerBarberoId(tenantId, userId);
 
     const maxPos = await this.prisma.portfolioImage.aggregate({
-      where: { barberId: barberoId },
+      where: { tenantId, barberId: barberoId },
       _max: { position: true },
     });
 
@@ -54,6 +54,7 @@ export class PortafolioService {
 
     return this.prisma.portfolioImage.create({
       data: {
+        tenantId,
         barberId: barberoId,
         imageUrl: imageUrl.trim(),
         position: nextPosition,
@@ -73,14 +74,15 @@ export class PortafolioService {
 
   /* ===== mostrar / ocultar ===== */
   async setVisible(
+    tenantId: string,
     userId: string,
     imagenId: string,
     visible: boolean,
   ) {
-    const barberoId = await this.obtenerBarberoId(userId);
+    const barberoId = await this.obtenerBarberoId(tenantId, userId);
 
-    const imagen = await this.prisma.portfolioImage.findUnique({
-      where: { id: imagenId },
+    const imagen = await this.prisma.portfolioImage.findFirst({
+      where: { id: imagenId, tenantId },
       select: { id: true, barberId: true, hiddenByAdmin: true },
     });
 
@@ -113,17 +115,18 @@ export class PortafolioService {
 
   /* ===== reordenar ===== */
   async reordenar(
+    tenantId: string,
     userId: string,
     items: { id: string; position: number }[],
   ) {
-    const barberoId = await this.obtenerBarberoId(userId);
+    const barberoId = await this.obtenerBarberoId(tenantId, userId);
 
     if (!items.length) return { ok: true };
 
     const ids = items.map((i) => i.id);
 
     const existentes = await this.prisma.portfolioImage.findMany({
-      where: { id: { in: ids } },
+      where: { tenantId, id: { in: ids } },
       select: { id: true, barberId: true },
     });
 

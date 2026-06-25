@@ -8,8 +8,9 @@ const links = [
   { href: "/admin/servicios", label: "Servicios" },
   { href: "/admin/barberos", label: "Barberos" },
   { href: "/admin/reservas", label: "Reservas" },
-  { href: "/admin/settings", label: "Configuración" },
   { href: "/admin/productos", label: "Productos" },
+  { href: "/admin/settings", label: "Configuración" },
+  
 ];
 
 export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -19,7 +20,7 @@ export default function AdminSidebar({ onNavigate }: { onNavigate?: () => void }
     <aside className="h-full w-64 border-r border-neutral-200 bg-white">
       <div className="px-5 py-4">
         <p className="text-sm font-semibold text-black">Panel Admin</p>
-        <p className="text-xs text-neutral-500">Black & White Studio</p>
+        <p className="text-xs text-neutral-500">¡Bienvenido!</p>
       </div>
 
       <nav className="px-2 pb-4">

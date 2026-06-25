@@ -4,9 +4,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type SessionUser = {
-  id: string;
+  id?: string;
+  sub?: string;
   email: string;
-  role: "ADMIN" | "BARBERO";
+  role: "SUPER_ADMIN" | "ADMIN" | "BARBERO";
 };
 
 type SesionContextValue = {
@@ -27,7 +28,6 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     try {
       const user = await apiFetch<SessionUser>("/auth/me", {
         method: "GET",
-        auth: false, // cookie httpOnly, NO bearer
       });
       setUser(user);
     } catch (e) {

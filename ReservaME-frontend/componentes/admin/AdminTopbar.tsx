@@ -37,7 +37,6 @@ export default function AdminTopbar({ onOpenMenu }: { onOpenMenu: () => void }) 
             Menú
           </button>
 
-          <span className="text-sm font-medium text-black">Administración</span>
         </div>
 
         <div className="flex items-center gap-3">

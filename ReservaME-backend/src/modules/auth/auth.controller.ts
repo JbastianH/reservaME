@@ -8,6 +8,7 @@ import {
   Res,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
+import type { TenantRequest } from "../../common/tenant/tenant-request.interface";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -18,7 +19,7 @@ import { ReenviarActivacionDto } from "./dto/reenviar-activacion.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { SolicitarRecuperacionDto } from "./dto/solicitar-recuperacion.dto";
 
-type RequestAutenticado = Request & { user?: any };
+type RequestAutenticado = TenantRequest & Request & { user?: any };
 
 @Controller("auth")
 export class AuthController {
@@ -38,10 +39,14 @@ export class AuthController {
 
   @Post("login")
   async login(
+    @Req() req: RequestAutenticado,
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, role } = await this.authService.login(dto);
+    const { accessToken, role, tenantId } = await this.authService.login(
+      req.tenant?.id,
+      dto,
+    );
 
     const opts = this.cookieOptions();
     res.clearCookie("bawstudio_at", opts);
@@ -51,7 +56,7 @@ export class AuthController {
       maxAge: 1000 * 60 * 60 * 8, // 8h (cookie)
     });
 
-    return { ok: true, role };
+    return { ok: true, accessToken, role, tenantId };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -80,8 +85,8 @@ export class AuthController {
 
   @Auth("ADMIN")
   @Post("admin/usuarios")
-  crearUsuario(@Body() dto: CrearUsuarioDto) {
-    return this.authService.crearUsuarioConActivacion(dto);
+  crearUsuario(@Req() req: RequestAutenticado, @Body() dto: CrearUsuarioDto) {
+    return this.authService.crearUsuarioConActivacion(req.tenant!.id, dto);
   }
 
   @Post("activar")
@@ -91,8 +96,11 @@ export class AuthController {
 
   @Auth("ADMIN")
   @Post("admin/usuarios/reenviar-activacion")
-  reenviarActivacion(@Body() dto: ReenviarActivacionDto) {
-    return this.authService.reenviarActivacion(dto.email);
+  reenviarActivacion(
+    @Req() req: RequestAutenticado,
+    @Body() dto: ReenviarActivacionDto,
+  ) {
+    return this.authService.reenviarActivacion(req.tenant!.id, dto.email);
   }
 
   @Post("logout")
@@ -104,13 +112,15 @@ export class AuthController {
   }
 
   @Post("solicitar-recuperacion")
-  solicitarRecuperacion(@Body() dto: SolicitarRecuperacionDto) {
-    return this.authService.solicitarRecuperacionPassword(dto);
+  solicitarRecuperacion(
+    @Req() req: RequestAutenticado,
+    @Body() dto: SolicitarRecuperacionDto,
+  ) {
+    return this.authService.solicitarRecuperacionPassword(req.tenant!.id, dto);
   }
 
   @Post("reset-password")
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetearPassword(dto);
-
-}
+  }
 }

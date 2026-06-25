@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 
 import { PrismaService } from '../../config/prisma.service';
 import { verifyPassword, hashPassword } from '../../common/utils/password.util';
@@ -15,8 +16,8 @@ import { generarTokenSeguro, hashToken } from '../../common/utils/tokens.util';
 import { LoginDto } from './dto/login.dto';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { ActivarCuentaDto } from './dto/activar-cuenta.dto';
-import { SolicitarRecuperacionDto } from './dto/solicitar-recuperacion.dto'; 
-import { ResetPasswordDto } from './dto/reset-password.dto'; 
+import { SolicitarRecuperacionDto } from './dto/solicitar-recuperacion.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MailService } from '../mail/mail.service';
 
 @Injectable()
@@ -28,15 +29,55 @@ export class AuthService {
     private readonly mail: MailService,
   ) {}
 
+  private construirUrlFrontendTenant(
+    tenantDomain: string | null | undefined,
+    path: string,
+  ) {
+    const domain = tenantDomain?.trim();
+
+    if (!domain) {
+      const frontendUrl = (
+        this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
+      ).replace(/\/$/, '');
+
+      return `${frontendUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
+    let domainLimpio = domain.replace(/\/$/, '');
+
+    const tieneProtocolo =
+      domainLimpio.startsWith('http://') || domainLimpio.startsWith('https://');
+
+    const esLocalhost = domainLimpio.includes('localhost');
+
+    const tienePuerto = /:\d+$/.test(domainLimpio);
+
+    if (esLocalhost && !tienePuerto) {
+      domainLimpio = `${domainLimpio}:3001`;
+    }
+
+    const baseUrl = tieneProtocolo
+      ? domainLimpio
+      : `${esLocalhost ? 'http' : 'https'}://${domainLimpio}`;
+
+    return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
   async login(
+    tenantId: string | undefined,
     dto: LoginDto,
-  ): Promise<{ accessToken: string; role: 'ADMIN' | 'BARBERO' }> {
+  ): Promise<{
+    accessToken: string;
+    role: UserRole;
+    tenantId: string | null;
+  }> {
     const email = dto.email.trim().toLowerCase();
 
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: {
         id: true,
+        tenantId: true,
         email: true,
         role: true,
         isActive: true,
@@ -45,24 +86,63 @@ export class AuthService {
     });
 
     if (!user) throw new UnauthorizedException('Credenciales inválidas.');
+
+    if (user.role !== 'SUPER_ADMIN') {
+      if (!tenantId || user.tenantId !== tenantId) {
+        throw new UnauthorizedException('Credenciales inválidas.');
+      }
+    }
+
     if (!user.isActive) throw new ForbiddenException('Cuenta no activada.');
-    if (!user.passwordHash)
+    if (!user.passwordHash) {
       throw new ForbiddenException(
         'Cuenta sin contraseña. Debe activar la cuenta.',
       );
+    }
 
     const ok = await verifyPassword(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Credenciales inválidas.');
 
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = {
+      sub: user.id,
+      tenantId: user.tenantId,
+      email: user.email,
+      role: user.role,
+    };
 
     const accessToken = await this.jwt.signAsync(payload);
-    return { accessToken, role: user.role };
+
+    return {
+      accessToken,
+      role: user.role,
+      tenantId: user.tenantId,
+    };
   }
 
   // Admin crea usuario sin contraseña + envía link de activación
-  async crearUsuarioConActivacion(dto: CrearUsuarioDto) {
+  async crearUsuarioConActivacion(tenantId: string, dto: CrearUsuarioDto) {
     const email = dto.email.trim().toLowerCase();
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        domain: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
+
+    if (dto.role === 'SUPER_ADMIN') {
+      throw new BadRequestException(
+        'No se puede crear un SUPER_ADMIN desde este flujo.',
+      );
+    }
 
     if (dto.role === 'BARBERO') {
       if (!dto.name?.trim()) {
@@ -95,6 +175,7 @@ export class AuthService {
     const resultado = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
+          tenantId,
           email,
           role: dto.role,
           isActive: false,
@@ -102,6 +183,7 @@ export class AuthService {
         },
         select: {
           id: true,
+          tenantId: true,
           email: true,
           role: true,
           isActive: true,
@@ -111,11 +193,10 @@ export class AuthService {
       if (dto.role === 'BARBERO') {
         await tx.barber.create({
           data: {
+            tenantId,
             userId: user.id,
             name: dto.name!.trim(),
             slug: dto.slug!.trim(),
-            linkSetmore: 'https://setmore.com', 
-
             bio: dto.bio?.trim() ?? null,
             phone: dto.phone?.trim() ?? null,
             photoUrl: dto.photoUrl?.trim() ?? null,
@@ -127,6 +208,7 @@ export class AuthService {
 
       await tx.token.create({
         data: {
+          tenantId,
           type: 'ACTIVACION_CUENTA',
           tokenHash,
           userId: user.id,
@@ -137,16 +219,15 @@ export class AuthService {
       return { user };
     });
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-    const link = `${frontendUrl}/activate/${tokenPlano}`;
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/activate/${encodeURIComponent(tokenPlano)}`,
+    );
 
-
-    await this.mail.enviarActivacionCuenta({ 
-      to: resultado.user.email, 
-      link, 
-      nombre: nombreParaCorreo 
+    await this.mail.enviarActivacionCuenta({
+      to: resultado.user.email,
+      link,
+      nombre: nombreParaCorreo,
     });
 
     return {
@@ -156,23 +237,41 @@ export class AuthService {
     };
   }
 
+  async reenviarActivacion(tenantId: string, emailRaw: string) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        domain: true,
+      },
+    });
 
-  async reenviarActivacion(emailRaw: string) {
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
     const email = emailRaw.trim().toLowerCase();
 
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      select: { 
-        id: true, 
-        email: true, 
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+        tenantId,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
         isActive: true,
-        barber: { select: { name: true } }
+        barber: { select: { name: true } },
       },
     });
 
     if (!user) throw new NotFoundException('Usuario no encontrado.');
-    if (user.isActive)
+    if (user.isActive) {
       throw new BadRequestException('El usuario ya se encuentra activo.');
+    }
 
     const ttlMin = Number(
       this.config.get('ACTIVATION_TOKEN_TTL_MINUTES') ?? 60,
@@ -185,6 +284,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.token.updateMany({
         where: {
+          tenantId,
           userId: user.id,
           type: 'ACTIVACION_CUENTA',
           usedAt: null,
@@ -193,6 +293,7 @@ export class AuthService {
       }),
       this.prisma.token.create({
         data: {
+          tenantId,
           type: 'ACTIVACION_CUENTA',
           tokenHash,
           userId: user.id,
@@ -201,18 +302,16 @@ export class AuthService {
       }),
     ]);
 
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
-    ).replace(/\/$/, '');
-    const link = `${frontendUrl}/activate/${tokenPlano}`;
-
-
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/activate/${encodeURIComponent(tokenPlano)}`,
+    );
     const nombreParaCorreo = user.barber?.name || 'Usuario';
 
-    await this.mail.enviarActivacionCuenta({ 
-      to: user.email, 
-      link, 
-      nombre: nombreParaCorreo 
+    await this.mail.enviarActivacionCuenta({
+      to: user.email,
+      link,
+      nombre: nombreParaCorreo,
     });
 
     return { ok: true, mensaje: 'Se reenvió el correo de activación.' };
@@ -220,7 +319,7 @@ export class AuthService {
 
   // Público activa cuenta (token + password)
   async activarCuenta(dto: ActivarCuentaDto) {
-    const tokenHash = hashToken(dto.token);
+    const tokenHash = hashToken(dto.token.trim());
 
     const token = await this.prisma.token.findUnique({
       where: { tokenHash },
@@ -267,35 +366,62 @@ export class AuthService {
     return { ok: true, mensaje: 'Cuenta activada correctamente.' };
   }
 
-  // MÉTODO: Solicitar recuperación de contraseña
-  async solicitarRecuperacionPassword(dto: SolicitarRecuperacionDto) {
+  async solicitarRecuperacionPassword(
+    tenantId: string,
+    dto: SolicitarRecuperacionDto,
+  ) {
     const email = dto.email.trim().toLowerCase();
 
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      select: { 
-        id: true, 
-        email: true, 
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
         isActive: true,
-        barber: { select: { name: true } }
+      },
+      select: {
+        id: true,
+        domain: true,
       },
     });
 
-    // Seguridad: Mensaje genérico para evitar enumeración de usuarios
+    if (!tenant) {
+      throw new BadRequestException('Tenant no válido o inactivo.');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+        tenantId,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        isActive: true,
+        barber: { select: { name: true } },
+      },
+    });
+
     if (!user) {
-      return { ok: true, mensaje: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
+      return {
+        ok: true,
+        mensaje:
+          'Si el correo está registrado, recibirás un enlace de recuperación.',
+      };
     }
 
     if (!user.isActive) {
-      throw new ForbiddenException('La cuenta debe estar activa para restablecer la contraseña.');
+      throw new ForbiddenException(
+        'La cuenta debe estar activa para restablecer la contraseña.',
+      );
     }
 
     const tokenPlano = generarTokenSeguro(32);
     const tokenHash = hashToken(tokenPlano);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
     await this.prisma.token.create({
       data: {
+        tenantId,
         type: 'RECUPERAR_PASSWORD',
         tokenHash,
         userId: user.id,
@@ -303,42 +429,52 @@ export class AuthService {
       },
     });
 
-    const frontendUrl = (this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3001').replace(/\/$/, '');
-    const link = `${frontendUrl}/login/reset-password/${tokenPlano}`;
+    const link = this.construirUrlFrontendTenant(
+      tenant.domain,
+      `/login/reset-password/${encodeURIComponent(tokenPlano)}`,
+    );
 
     const nombreParaCorreo = user.barber?.name || 'Administrador';
 
-    await this.mail.enviarRecuperacionPassword({ 
-      to: user.email, 
-      link, 
-      nombre: nombreParaCorreo 
+    await this.mail.enviarRecuperacionPassword({
+      to: user.email,
+      link,
+      nombre: nombreParaCorreo,
     });
 
-    return { ok: true, mensaje: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
+    return {
+      ok: true,
+      mensaje:
+        'Si el correo está registrado, recibirás un enlace de recuperación.',
+    };
   }
 
-  // MÉTODO: Ejecutar el reset de contraseña con el token
   async resetearPassword(dto: ResetPasswordDto) {
-    const tokenHash = hashToken(dto.token);
+    const tokenHash = hashToken(dto.token.trim());
 
     const token = await this.prisma.token.findUnique({
       where: { tokenHash },
-      include: { user: true }
+      include: { user: true },
     });
 
     if (!token || token.type !== 'RECUPERAR_PASSWORD') {
       throw new NotFoundException('El enlace es inválido o ha expirado.');
     }
-    if (token.usedAt) throw new BadRequestException('Este enlace ya fue utilizado.');
+    if (token.usedAt) {
+      throw new BadRequestException('Este enlace ya fue utilizado.');
+    }
     if (token.expiresAt.getTime() <= Date.now()) {
       throw new BadRequestException('El enlace ha expirado.');
+    }
+    if (!token.userId) {
+      throw new BadRequestException('Token inválido.');
     }
 
     const newPasswordHash = await hashPassword(dto.password);
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { id: token.userId ?? undefined },
+        where: { id: token.userId },
         data: { passwordHash: newPasswordHash },
       }),
       this.prisma.token.update({
@@ -347,6 +483,9 @@ export class AuthService {
       }),
     ]);
 
-    return { ok: true, mensaje: 'Tu contraseña ha sido actualizada correctamente.' };
+    return {
+      ok: true,
+      mensaje: 'Tu contraseña ha sido actualizada correctamente.',
+    };
   }
 }

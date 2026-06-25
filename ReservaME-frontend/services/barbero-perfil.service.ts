@@ -4,7 +4,6 @@ export type BarberoMe = {
   id: string;
   name: string;
   slug: string;
-  linkSetmore: string;
   bio: string | null;
   phone: string | null;
   photoUrl: string | null;
@@ -25,7 +24,6 @@ export function patchBarberoMe(dto: {
   bio?: string;
   phone?: string;
   photoUrl?: string;
-  linkSetmore?: string;
 }) {
   return apiPatch<BarberoMe>("/barbero/me", dto);
 }

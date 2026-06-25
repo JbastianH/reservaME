@@ -50,9 +50,9 @@ export default function PortafolioLightbox({ fotos, titulo = "Portafolio" }: Pro
   if (items.length === 0) return null;
 
   return (
-    <section className="mt-10">
+    <section className="mt-0">
       <div className="flex items-end justify-between gap-3 mb-4">
-        <h2 className="text-lg font-semibold text-white">{titulo}</h2>
+        <h2 className="text-2xl font-semibold text-white">{titulo}</h2>
         <p className="text-xs text-white/30 tracking-widest uppercase">Click para Pantalla Completa →</p>
       </div>
 

@@ -8,6 +8,8 @@ import { cancelarReservaBarbero, completarReservaBarbero } from "@/services/rese
 
 // Reusar el modal de público en modo REPROGRAMAR
 import ReservaModal from "@/componentes/publico/ReservaModal";
+import ConfirmDialog from "@/componentes/ui/ConfirmDialog";
+import FeedbackDialog from "@/componentes/ui/FeedbackDialog";
 
 type ReservaItem = {
   id: string;
@@ -87,15 +89,22 @@ export default function BarberoReservasPage() {
   const pageSize = 10;
 
   // Acciones
+  // Acciones
   const [accionId, setAccionId] = useState<string | null>(null);
-  const [mensajeOk, setMensajeOk] = useState("");
-  const [mensajeError, setMensajeError] = useState("");
+
+  const [feedbackDialog, setFeedbackDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    variant: "success" as "success" | "error",
+  });
 
   // reprogramación con slots (usando ReservaModal)
   const [reprogOpen, setReprogOpen] = useState(false);
   const [reprogTarget, setReprogTarget] = useState<ReservaItem | null>(null);
 
   // NUEVO: confirmación custom para cancelar
+  const [completeTarget, setCompleteTarget] = useState<ReservaItem | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ReservaItem | null>(null);
 
   // Cuando cambian filtros, vuelve a página 1
@@ -145,18 +154,51 @@ export default function BarberoReservasPage() {
     }));
   }, [data]);
 
-  async function handleCompletar(reservaId: string) {
+  function mostrarFeedback(params: {
+    title: string;
+    message: string;
+    variant: "success" | "error";
+  }) {
+    setFeedbackDialog({
+      open: true,
+      title: params.title,
+      message: params.message,
+      variant: params.variant,
+    });
+  }
+
+  function abrirCompletar(r: ReservaItem) {
+    setCompleteTarget(r);
+  }
+
+  function cerrarCompletar() {
+    if (accionId === completeTarget?.id) return;
+    setCompleteTarget(null);
+  }
+
+  async function confirmarCompletar() {
+    if (!completeTarget?.id) return;
+
     try {
-      setMensajeOk("");
-      setMensajeError("");
-      setAccionId(reservaId);
+      setAccionId(completeTarget.id);
 
-      await completarReservaBarbero(reservaId);
+      await completarReservaBarbero(completeTarget.id);
 
-      setMensajeOk("Reserva completada ✔︎");
+      setCompleteTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva completada",
+        message: "La reserva fue marcada como completada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
-    } catch {
-      setMensajeError("No se pudo completar la reserva.");
+    } catch (e: any) {
+      mostrarFeedback({
+        title: "No se pudo completar",
+        message: e?.message ? String(e.message) : "No se pudo completar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
@@ -164,38 +206,52 @@ export default function BarberoReservasPage() {
 
   // NUEVO: flujo cancelar con modal custom
   function abrirCancelar(r: ReservaItem) {
-    setMensajeOk("");
-    setMensajeError("");
     setCancelTarget(r);
   }
 
   function cerrarCancelar() {
+    if (accionId === cancelTarget?.id) return;
     setCancelTarget(null);
   }
 
   async function confirmarCancelar() {
-    if (!cancelTarget) return;
+    if (!cancelTarget?.id) return;
 
     try {
-      setMensajeOk("");
-      setMensajeError("");
       setAccionId(cancelTarget.id);
 
       await cancelarReservaBarbero(cancelTarget.id);
 
-      setMensajeOk("Reserva cancelada ✔︎");
-      cerrarCancelar();
+      setCancelTarget(null);
+
+      mostrarFeedback({
+        title: "Reserva cancelada",
+        message: "La reserva fue cancelada correctamente.",
+        variant: "success",
+      });
+
       await refetch();
-    } catch {
-      setMensajeError("No se pudo cancelar la reserva.");
+    } catch (e: any) {
+      mostrarFeedback({
+        title: "No se pudo cancelar",
+        message: e?.message ? String(e.message) : "No se pudo cancelar la reserva.",
+        variant: "error",
+      });
     } finally {
       setAccionId(null);
     }
   }
 
   function abrirReprogramar(r: ReservaItem) {
-    setMensajeOk("");
-    setMensajeError("");
+    if (!r.barberSlug) {
+      mostrarFeedback({
+        title: "No se pudo reprogramar",
+        message: "Falta el identificador público del barbero.",
+        variant: "error",
+      });
+      return;
+    }
+
     setReprogTarget(r);
     setReprogOpen(true);
   }
@@ -253,19 +309,6 @@ export default function BarberoReservasPage() {
           </div>
         </div>
       </div>
-
-      {/* OK / Error message */}
-      {!loading && !error && mensajeOk ? (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {mensajeOk}
-        </div>
-      ) : null}
-
-      {!loading && !error && mensajeError ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {mensajeError}
-        </div>
-      ) : null}
 
       {/* Loading / Error (hook) */}
       {loading ? (
@@ -331,7 +374,7 @@ export default function BarberoReservasPage() {
                       {r.estado === "CONFIRMADA" ? (
                         <div className="flex flex-wrap gap-2">
                           <button
-                            onClick={() => void handleCompletar(r.id)}
+                            onClick={() => void abrirCompletar(r)}
                             disabled={accionId === r.id}
                             className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                           >
@@ -403,17 +446,17 @@ export default function BarberoReservasPage() {
                   </p>
 
                   {r.comment?.trim() ? (
-                      <p>
-                        <span className="text-neutral-500">Comentario:</span>{" "}
-                        <span className="text-neutral-700">{r.comment}</span>
-                      </p>
-                    ) : null}
+                    <p>
+                      <span className="text-neutral-500">Comentario:</span>{" "}
+                      <span className="text-neutral-700">{r.comment}</span>
+                    </p>
+                  ) : null}
                 </div>
 
                 {r.estado === "CONFIRMADA" ? (
                   <div className="mt-4 grid grid-cols-1 gap-2">
                     <button
-                      onClick={() => void handleCompletar(r.id)}
+                      onClick={() => void abrirCompletar(r)}
                       disabled={accionId === r.id}
                       className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
                     >
@@ -485,47 +528,61 @@ export default function BarberoReservasPage() {
           reservaId={reprogTarget.id}
           initialDate={isoToISODate(reprogTarget.startAt)}
           onSuccess={async (info) => {
-            setMensajeOk(info.mensaje); // "Reserva reprogramada. Correo enviado ✔︎"
-            setMensajeError("");
             cerrarReprogramar();
+
+            mostrarFeedback({
+              title: "Reserva reprogramada",
+              message: info.mensaje || "La reserva fue reprogramada correctamente.",
+              variant: "success",
+            });
+
             await refetch();
           }}
         />
       ) : null}
 
-      {/* Modal confirmación cancelar (custom) */}
-      {cancelTarget ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-black">Cancelar reserva</h3>
+      <ConfirmDialog
+        open={Boolean(completeTarget)}
+        title="Completar reserva"
+        message={
+          completeTarget
+            ? `¿Seguro que quieres marcar como completada la reserva de ${completeTarget.clienteNombre}?`
+            : ""
+        }
+        confirmText={accionId === completeTarget?.id ? "Completando..." : "Sí, completar"}
+        cancelText="Volver"
+        variant="default"
+        onConfirm={() => void confirmarCompletar()}
+        onClose={cerrarCompletar}
+      />
 
-            <p className="mt-2 text-sm text-neutral-600">
-              Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de{" "}
-              <span className="font-medium text-black">{cancelTarget.clienteNombre}</span>?
-            </p>
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancelar reserva"
+        message={
+          cancelTarget
+            ? `Esta acción no se puede deshacer. ¿Seguro que deseas cancelar la reserva de ${cancelTarget.clienteNombre}?`
+            : ""
+        }
+        confirmText={accionId === cancelTarget?.id ? "Cancelando..." : "Sí, cancelar"}
+        cancelText="Volver"
+        variant="danger"
+        onConfirm={() => void confirmarCancelar()}
+        onClose={cerrarCancelar}
+      />
 
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={cerrarCancelar}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Volver
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void confirmarCancelar()}
-                disabled={accionId === cancelTarget.id}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {accionId === cancelTarget.id ? "Cancelando..." : "Sí, cancelar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        variant={feedbackDialog.variant}
+        onClose={() =>
+          setFeedbackDialog((actual) => ({
+            ...actual,
+            open: false,
+          }))
+        }
+      />
     </section>
   );
 }

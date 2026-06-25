@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Patch, Param, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
+import type { TenantRequest } from "../../common/tenant/tenant-request.interface";
 import { Auth } from "../../common/decorators/auth.decorator";
 import { BarberServicesService } from "./barber-service.service";
 import { ActualizarServicioBarberoDto } from "./dto/actualizar-servicio-barbero.dto";
 
-type RequestAutenticado = Request & { user?: { sub?: string } };
+type RequestAutenticado = TenantRequest & Request & { user?: { sub?: string } };
 
 @Auth("BARBERO")
 @Controller("barbero/servicios")
@@ -26,7 +27,7 @@ export class BarberoBarberServiciosController {
             ? false
             : undefined;
 
-    return this.service.listarPorBarberoAutenticado(userId, { activos: activosBool });
+    return this.service.listarPorBarberoAutenticado(req.tenant!.id, userId, { activos: activosBool });
   }
 
   // PATCH /barbero/servicios/:barberServiceId
@@ -39,6 +40,6 @@ export class BarberoBarberServiciosController {
     const userId = req.user?.sub;
     if (!userId) throw new Error("JWT sin sub en req.user");
 
-    return this.service.actualizarPorBarberoAutenticado(userId, barberServiceId, dto);
+    return this.service.actualizarPorBarberoAutenticado(req.tenant!.id, userId, barberServiceId, dto);
   }
 }

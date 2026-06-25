@@ -8,14 +8,15 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { Request } from 'express';
+import type { Request } from 'express';
+import type { TenantRequest } from '../../common/tenant/tenant-request.interface';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { ResenasService } from './resenas.service';
 import { CrearResenaPublicaDto } from './dto/crear-resena-publica.dto';
 import { ListarResenasQueryDto } from './dto/listar-resenas.query.dto';
 
-type RequestAutenticado = Request & {
-  user: { id: string; role: 'ADMIN' | 'BARBERO' };
+type RequestAutenticado = TenantRequest & Request & {
+  user: { id: string; sub?: string; role: 'SUPER_ADMIN' | 'ADMIN' | 'BARBERO' };
 };
 
 @Controller()
@@ -31,8 +32,8 @@ export class ResenasController {
   // ADMIN: listar todas
   @Auth('ADMIN')
   @Get('admin/resenas')
-  listarAdmin(@Query() query: ListarResenasQueryDto) {
-    return this.service.listarAdmin(query);
+  listarAdmin(@Req() req: RequestAutenticado, @Query() query: ListarResenasQueryDto) {
+    return this.service.listarAdmin(req.tenant!.id, query);
   }
 
   // BARBERO: listar solo las propias
@@ -42,32 +43,35 @@ export class ResenasController {
     @Req() req: RequestAutenticado,
     @Query() query: ListarResenasQueryDto,
   ) {
-    return this.service.listarBarbero(req.user!.id, query);
+    const userId = req.user!.sub ?? req.user!.id;
+    return this.service.listarBarbero(req.tenant!.id, userId, query);
   }
 
   // ADMIN: ocultar / mostrar
   @Auth('ADMIN')
   @Patch('admin/resenas/:id/ocultar')
-  ocultarAdmin(@Param('id') id: string) {
-    return this.service.setVisibleComoAdmin(id, false);
+  ocultarAdmin(@Req() req: RequestAutenticado, @Param('id') id: string) {
+    return this.service.setVisibleComoAdmin(req.tenant!.id, id, false);
   }
 
   @Auth('ADMIN')
   @Patch('admin/resenas/:id/mostrar')
-  mostrarAdmin(@Param('id') id: string) {
-    return this.service.setVisibleComoAdmin(id, true);
+  mostrarAdmin(@Req() req: RequestAutenticado, @Param('id') id: string) {
+    return this.service.setVisibleComoAdmin(req.tenant!.id, id, true);
   }
 
   // BARBERO: ocultar / mostrar sus propias reseñas
   @Auth('BARBERO')
   @Patch('barbero/resenas/:id/ocultar')
   ocultarBarbero(@Req() req: RequestAutenticado, @Param('id') id: string) {
-    return this.service.setVisibleComoBarbero(req.user!.id, id, false);
+    const userId = req.user!.sub ?? req.user!.id;
+    return this.service.setVisibleComoBarbero(req.tenant!.id, userId, id, false);
   }
 
   @Auth('BARBERO')
   @Patch('barbero/resenas/:id/mostrar')
   mostrarBarbero(@Req() req: RequestAutenticado, @Param('id') id: string) {
-    return this.service.setVisibleComoBarbero(req.user!.id, id, true);
+    const userId = req.user!.sub ?? req.user!.id;
+    return this.service.setVisibleComoBarbero(req.tenant!.id, userId, id, true);
   }
 }
